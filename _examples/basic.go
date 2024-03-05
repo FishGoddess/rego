@@ -24,14 +24,19 @@ func releaseConn(conn net.Conn) error {
 }
 
 func main() {
+	// Create a resource pool which type is net.Conn and limit is 64.
 	pool := rego.New[net.Conn](acquireConn, releaseConn, rego.WithLimit(64))
 	defer pool.Close()
 
+	// Take a resource from pool.
 	conn, err := pool.Take(context.Background())
 	if err != nil {
 		panic(err)
 	}
 
+	// Remember put the client to pool when your using is done.
+	// This is why we call the resource in pool is reusable.
+	// We recommend you to do this job in a defer function.
 	defer pool.Put(conn)
 
 	// Use the conn
