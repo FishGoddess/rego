@@ -7,22 +7,40 @@ package rego
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 // go test -v -cover -count=1 -test.cpu=1 -run=^TestWithFastFailed$
 func TestPool(t *testing.T) {
+	limit := int64(16)
+	acquireLimit := int64(0)
+	releaseLimit := int64(0)
+
 	acquire := func() (int, error) {
+		atomic.AddInt64(&acquireLimit, 1)
+		atomic.AddInt64(&releaseLimit, 1)
 		return 0, nil
 	}
 
 	release := func(resource int) error {
+		atomic.AddInt64(&releaseLimit, -1)
 		return nil
 	}
 
-	pool := New[int](acquire, release, WithLimit(16))
-	defer pool.Close()
+	pool := New[int](acquire, release, WithLimit(uint64(limit)))
+	defer func() {
+		pool.Close()
+
+		if acquireLimit != limit {
+			t.Fatalf("acquireLimit %d != limit %d", acquireLimit, limit)
+		}
+
+		if releaseLimit != 0 {
+			t.Fatalf("releaseLimit %d != 0", releaseLimit)
+		}
+	}()
 
 	go func() {
 		for {
@@ -67,7 +85,7 @@ func TestPool(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 4096; i++ {
 		wg.Add(1)
-		go func(i int) {
+		go func() {
 			defer wg.Done()
 
 			resource, err := pool.Take(context.Background())
@@ -89,7 +107,7 @@ func TestPool(t *testing.T) {
 				t.Errorf("status.Idle %d is wrong", status.Idle)
 				return
 			}
-		}(i)
+		}()
 	}
 
 	wg.Wait()

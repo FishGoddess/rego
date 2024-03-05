@@ -185,7 +185,7 @@ func (p *Pool[T]) Status() Status {
 }
 
 func (p *Pool[T]) releaseResources() error {
-	for i := 0; i < len(p.resources); i++ {
+	for i := uint64(0); i < p.acquired; i++ {
 		resource := <-p.resources
 		if err := p.release(resource); err != nil {
 			return err
