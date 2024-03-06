@@ -5,6 +5,8 @@
 package rego
 
 import (
+	"context"
+	"fmt"
 	"testing"
 )
 
@@ -25,5 +27,33 @@ func TestWithFastFailed(t *testing.T) {
 
 	if !conf.fastFailed {
 		t.Fatalf("conf.fastFailed %+v is wrong", conf.fastFailed)
+	}
+}
+
+// go test -v -cover -count=1 -test.cpu=1 -run=^TestWithPoolFullErr$
+func TestWithPoolFullErr(t *testing.T) {
+	newPoolFullErr := func(ctx context.Context) error {
+		return nil
+	}
+
+	conf := &config{newPoolFullErrFunc: nil}
+	WithPoolFullErr(newPoolFullErr)(conf)
+
+	if fmt.Sprintf("%p", conf.newPoolFullErrFunc) != fmt.Sprintf("%p", newPoolFullErr) {
+		t.Fatalf("conf.newPoolFullErrFunc %p is wrong", conf.newPoolFullErrFunc)
+	}
+}
+
+// go test -v -cover -count=1 -test.cpu=1 -run=^TestWithPoolClosedErr$
+func TestWithPoolClosedErr(t *testing.T) {
+	newPoolClosedErr := func(ctx context.Context) error {
+		return nil
+	}
+
+	conf := &config{newPoolClosedErrFunc: nil}
+	WithPoolClosedErr(newPoolClosedErr)(conf)
+
+	if fmt.Sprintf("%p", conf.newPoolClosedErrFunc) != fmt.Sprintf("%p", newPoolClosedErr) {
+		t.Fatalf("conf.newPoolClosedErrFunc %p is wrong", conf.newPoolClosedErrFunc)
 	}
 }
