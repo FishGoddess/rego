@@ -1,4 +1,4 @@
-// Copyright 2024 FishGoddess. All rights reserved.
+// Copyright 2025 FishGoddess. All rights reserved.
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
@@ -7,7 +7,6 @@ package rego
 import "context"
 
 type config struct {
-	limit      uint64
 	fastFailed bool
 
 	newPoolFullErrFunc   func(ctx context.Context) error
@@ -16,7 +15,6 @@ type config struct {
 
 func newDefaultConfig() *config {
 	conf := &config{
-		limit:                64,
 		fastFailed:           false,
 		newPoolFullErrFunc:   nil,
 		newPoolClosedErrFunc: nil,
@@ -29,13 +27,6 @@ type Option func(conf *config)
 
 func (o Option) ApplyTo(conf *config) {
 	o(conf)
-}
-
-// WithLimit sets limit to config.
-func WithLimit(limit uint64) Option {
-	return func(conf *config) {
-		conf.limit = limit
-	}
 }
 
 // WithFastFailed sets fastFailed to config.

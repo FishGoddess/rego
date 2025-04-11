@@ -1,4 +1,4 @@
-// Copyright 2024 FishGoddess. All rights reserved.
+// Copyright 2025 FishGoddess. All rights reserved.
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
@@ -56,7 +56,7 @@ func main() {
 	// The acquire function is for acquiring a new resource, and you can do some setups for your resource.
 	// The release function is for releasing the given resource, and you can destroy everything of your resource.
 	// Also, you can specify some options to change the default settings.
-	pool := rego.New[*http.Client](acquireClient, releaseClient, rego.WithLimit(4))
+	pool := rego.New(4, acquireClient, releaseClient)
 	defer pool.Close()
 
 	var wg sync.WaitGroup

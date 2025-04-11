@@ -1,4 +1,4 @@
-// Copyright 2024 FishGoddess. All rights reserved.
+// Copyright 2025 FishGoddess. All rights reserved.
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
@@ -29,7 +29,7 @@ func TestPool(t *testing.T) {
 		return nil
 	}
 
-	pool := New[int](acquire, release, WithLimit(uint64(limit)))
+	pool := New(uint64(limit), acquire, release)
 	defer func() {
 		pool.Close()
 

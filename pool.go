@@ -1,4 +1,4 @@
-// Copyright 2024 FishGoddess. All rights reserved.
+// Copyright 2025 FishGoddess. All rights reserved.
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
@@ -42,20 +42,21 @@ func DefaultReleaseFunc[T any](resource T) error {
 }
 
 type Pool[T any] struct {
-	config
+	conf config
 
 	acquire AcquireFunc[T]
 	release ReleaseFunc[T]
 
-	resources chan T
+	limit     uint64
 	acquired  uint64
 	waiting   uint64
+	resources chan T
 	closed    bool
 
 	lock sync.RWMutex
 }
 
-func New[T any](acquire AcquireFunc[T], release ReleaseFunc[T], opts ...Option) *Pool[T] {
+func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], opts ...Option) *Pool[T] {
 	if acquire == nil || release == nil {
 		panic("rego: acquire or release func can't be nil")
 	}
@@ -66,10 +67,11 @@ func New[T any](acquire AcquireFunc[T], release ReleaseFunc[T], opts ...Option) 
 	}
 
 	pool := &Pool[T]{
-		config:    *conf,
+		conf:      *conf,
+		limit:     limit,
 		acquire:   acquire,
 		release:   release,
-		resources: make(chan T, conf.limit),
+		resources: make(chan T, limit),
 		closed:    false,
 	}
 
@@ -93,19 +95,19 @@ func (p *Pool[T]) Put(resource T) error {
 }
 
 func (p *Pool[T]) newPoolFullErr(ctx context.Context) error {
-	if p.newPoolFullErrFunc == nil {
+	if p.conf.newPoolFullErrFunc == nil {
 		return ErrPoolIsFull
 	}
 
-	return p.newPoolFullErrFunc(ctx)
+	return p.conf.newPoolFullErrFunc(ctx)
 }
 
 func (p *Pool[T]) newPoolClosedErr(ctx context.Context) error {
-	if p.newPoolClosedErrFunc == nil {
+	if p.conf.newPoolClosedErrFunc == nil {
 		return ErrPoolIsClosed
 	}
 
-	return p.newPoolClosedErrFunc(ctx)
+	return p.conf.newPoolClosedErrFunc(ctx)
 }
 
 func (p *Pool[T]) tryToTake() (resource T, ok bool) {
@@ -169,21 +171,22 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return p.acquire()
 	}
 
-	if p.fastFailed {
+	if p.conf.fastFailed {
 		p.lock.Unlock()
+
 		return resource, p.newPoolFullErr(ctx)
 	}
 
 	p.waiting++
 	p.lock.Unlock()
 
-	resource, err = p.waitToTake(ctx)
+	defer func() {
+		p.lock.Lock()
+		p.waiting--
+		p.lock.Unlock()
+	}()
 
-	p.lock.Lock()
-	p.waiting--
-	p.lock.Unlock()
-
-	return resource, err
+	return p.waitToTake(ctx)
 }
 
 // Status returns the status of the pool.
@@ -191,11 +194,12 @@ func (p *Pool[T]) Status() Status {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
-	var status Status
-	status.Limit = p.limit
-	status.Acquired = p.acquired
-	status.Idle = uint64(len(p.resources))
-	status.Waiting = p.waiting
+	status := Status{
+		Limit:    p.limit,
+		Acquired: p.acquired,
+		Idle:     uint64(len(p.resources)),
+		Waiting:  p.waiting,
+	}
 
 	return status
 }
@@ -207,6 +211,11 @@ func (p *Pool[T]) releaseResources() error {
 			return err
 		}
 	}
+	// for resource := range p.resources {
+	// 	if err := p.release(resource); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	return nil
 }
