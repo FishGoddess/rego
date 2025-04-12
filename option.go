@@ -17,8 +17,8 @@ var (
 type config struct {
 	fastFailed bool
 
-	newPoolFullErr   func(ctx context.Context) error
-	newPoolClosedErr func(ctx context.Context) error
+	newPoolFullErrFunc   func(ctx context.Context) error
+	newPoolClosedErrFunc func(ctx context.Context) error
 }
 
 func newDefaultConfig() *config {
@@ -31,12 +31,28 @@ func newDefaultConfig() *config {
 	}
 
 	conf := &config{
-		fastFailed:       false,
-		newPoolFullErr:   newPoolFullErr,
-		newPoolClosedErr: newPoolClosedErr,
+		fastFailed:           false,
+		newPoolFullErrFunc:   newPoolFullErr,
+		newPoolClosedErrFunc: newPoolClosedErr,
 	}
 
 	return conf
+}
+
+func (c *config) newPoolFullErr(ctx context.Context) error {
+	if c.newPoolFullErrFunc == nil {
+		return nil
+	}
+
+	return c.newPoolFullErrFunc(ctx)
+}
+
+func (c *config) newPoolClosedErr(ctx context.Context) error {
+	if c.newPoolClosedErrFunc == nil {
+		return nil
+	}
+
+	return c.newPoolClosedErrFunc(ctx)
 }
 
 type Option func(conf *config)
@@ -55,17 +71,13 @@ func WithFastFailed() Option {
 // WithPoolFullErr sets newPoolFullErr to config.
 func WithPoolFullErr(newPoolFullErr func(ctx context.Context) error) Option {
 	return func(conf *config) {
-		if newPoolFullErr != nil {
-			conf.newPoolFullErr = newPoolFullErr
-		}
+		conf.newPoolFullErrFunc = newPoolFullErr
 	}
 }
 
 // WithPoolClosedErr sets newPoolClosedErr to config.
 func WithPoolClosedErr(newPoolClosedErr func(ctx context.Context) error) Option {
 	return func(conf *config) {
-		if newPoolClosedErr != nil {
-			conf.newPoolClosedErr = newPoolClosedErr
-		}
+		conf.newPoolClosedErrFunc = newPoolClosedErr
 	}
 }
