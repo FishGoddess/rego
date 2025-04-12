@@ -45,7 +45,7 @@ func releaseConn(conn net.Conn) error {
 
 func main() {
 	// Create a resource pool which type is net.Conn and limit is 64.
-	pool := rego.New[net.Conn](acquireConn, releaseConn, rego.WithLimit(64))
+	pool := rego.New(64, acquireConn, releaseConn)
 	defer pool.Close()
 
 	// Take a resource from pool.

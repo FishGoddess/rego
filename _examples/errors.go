@@ -1,4 +1,4 @@
-// Copyright 2024 FishGoddess. All rights reserved.
+// Copyright 2025 FishGoddess. All rights reserved.
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
@@ -36,7 +36,7 @@ func newPoolClosedErr(ctx context.Context) error {
 func main() {
 	// Create a pool with limit and fast-failed so it will return an error immediately instead of waiting.
 	ctx := context.Background()
-	pool := rego.New[int](acquire, release, rego.WithLimit(1), rego.WithFastFailed())
+	pool := rego.New(1, acquire, release, rego.WithFastFailed())
 
 	// Take one resource from pool which is ok.
 	resource, err := pool.Take(ctx)
@@ -56,7 +56,7 @@ func main() {
 	fmt.Println(resource, err, err == rego.ErrPoolIsClosed)
 
 	// Create a pool with limit and fast-failed and new error funcs.
-	pool = rego.New[int](acquire, release, rego.WithLimit(1), rego.WithFastFailed(), rego.WithPoolFullErr(newPoolFullErr), rego.WithPoolClosedErr(newPoolClosedErr))
+	pool = rego.New(1, acquire, release, rego.WithFastFailed(), rego.WithPoolFullErr(newPoolFullErr), rego.WithPoolClosedErr(newPoolClosedErr))
 
 	// Take one resource from pool which is ok.
 	resource, err = pool.Take(ctx)

@@ -1,4 +1,4 @@
-// Copyright 2024 FishGoddess. All rights reserved.
+// Copyright 2025 FishGoddess. All rights reserved.
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
@@ -10,17 +10,7 @@ import (
 	"testing"
 )
 
-// go test -v -cover -count=1 -test.cpu=1 -run=^TestWithLimit$
-func TestWithLimit(t *testing.T) {
-	conf := &config{limit: 0}
-	WithLimit(64)(conf)
-
-	if conf.limit != 64 {
-		t.Fatalf("conf.limit %d is wrong", conf.limit)
-	}
-}
-
-// go test -v -cover -count=1 -test.cpu=1 -run=^TestWithFastFailed$
+// go test -v -cover -run=^TestWithFastFailed$
 func TestWithFastFailed(t *testing.T) {
 	conf := &config{fastFailed: false}
 	WithFastFailed()(conf)
@@ -30,30 +20,42 @@ func TestWithFastFailed(t *testing.T) {
 	}
 }
 
-// go test -v -cover -count=1 -test.cpu=1 -run=^TestWithPoolFullErr$
+// go test -v -cover -run=^TestWithPoolFullErr$
 func TestWithPoolFullErr(t *testing.T) {
 	newPoolFullErr := func(ctx context.Context) error {
 		return nil
 	}
 
-	conf := &config{newPoolFullErrFunc: nil}
+	conf := &config{newPoolFullErr: nil}
 	WithPoolFullErr(newPoolFullErr)(conf)
 
-	if fmt.Sprintf("%p", conf.newPoolFullErrFunc) != fmt.Sprintf("%p", newPoolFullErr) {
-		t.Fatalf("conf.newPoolFullErrFunc %p is wrong", conf.newPoolFullErrFunc)
+	if fmt.Sprintf("%p", conf.newPoolFullErr) != fmt.Sprintf("%p", newPoolFullErr) {
+		t.Fatalf("conf.newPoolFullErr %p is wrong", conf.newPoolFullErr)
+	}
+
+	WithPoolFullErr(nil)(conf)
+
+	if fmt.Sprintf("%p", conf.newPoolFullErr) != fmt.Sprintf("%p", newPoolFullErr) {
+		t.Fatalf("conf.newPoolFullErr %p is wrong", conf.newPoolFullErr)
 	}
 }
 
-// go test -v -cover -count=1 -test.cpu=1 -run=^TestWithPoolClosedErr$
+// go test -v -cover -run=^TestWithPoolClosedErr$
 func TestWithPoolClosedErr(t *testing.T) {
 	newPoolClosedErr := func(ctx context.Context) error {
 		return nil
 	}
 
-	conf := &config{newPoolClosedErrFunc: nil}
+	conf := &config{newPoolClosedErr: nil}
 	WithPoolClosedErr(newPoolClosedErr)(conf)
 
-	if fmt.Sprintf("%p", conf.newPoolClosedErrFunc) != fmt.Sprintf("%p", newPoolClosedErr) {
-		t.Fatalf("conf.newPoolClosedErrFunc %p is wrong", conf.newPoolClosedErrFunc)
+	if fmt.Sprintf("%p", conf.newPoolClosedErr) != fmt.Sprintf("%p", newPoolClosedErr) {
+		t.Fatalf("conf.newPoolClosedErr %p is wrong", conf.newPoolClosedErr)
+	}
+
+	WithPoolClosedErr(nil)(conf)
+
+	if fmt.Sprintf("%p", conf.newPoolClosedErr) != fmt.Sprintf("%p", newPoolClosedErr) {
+		t.Fatalf("conf.newPoolClosedErr %p is wrong", conf.newPoolClosedErr)
 	}
 }
