@@ -6,13 +6,7 @@ package rego
 
 import (
 	"context"
-	"errors"
 	"sync"
-)
-
-var (
-	ErrPoolIsFull   = errors.New("rego: pool is full")
-	ErrPoolIsClosed = errors.New("rego: pool is closed")
 )
 
 type Status struct {
@@ -57,6 +51,10 @@ type Pool[T any] struct {
 }
 
 func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], opts ...Option) *Pool[T] {
+	if limit <= 0 {
+		panic("rego: limit can't be less than 0")
+	}
+
 	if acquire == nil || release == nil {
 		panic("rego: acquire or release func can't be nil")
 	}
@@ -94,22 +92,6 @@ func (p *Pool[T]) Put(resource T) error {
 	}
 }
 
-func (p *Pool[T]) newPoolFullErr(ctx context.Context) error {
-	if p.conf.newPoolFullErrFunc == nil {
-		return ErrPoolIsFull
-	}
-
-	return p.conf.newPoolFullErrFunc(ctx)
-}
-
-func (p *Pool[T]) newPoolClosedErr(ctx context.Context) error {
-	if p.conf.newPoolClosedErrFunc == nil {
-		return ErrPoolIsClosed
-	}
-
-	return p.conf.newPoolClosedErrFunc(ctx)
-}
-
 func (p *Pool[T]) tryToTake() (resource T, ok bool) {
 	select {
 	case resource = <-p.resources:
@@ -144,7 +126,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	if p.closed {
 		p.lock.Unlock()
 
-		return resource, p.newPoolClosedErr(ctx)
+		return resource, p.conf.newPoolClosedErr(ctx)
 	}
 
 	var ok bool
@@ -174,7 +156,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	if p.conf.fastFailed {
 		p.lock.Unlock()
 
-		return resource, p.newPoolFullErr(ctx)
+		return resource, p.conf.newPoolFullErr(ctx)
 	}
 
 	p.waiting++
@@ -205,19 +187,16 @@ func (p *Pool[T]) Status() Status {
 }
 
 func (p *Pool[T]) releaseResources() error {
-	for i := uint64(0); i < p.acquired; i++ {
-		resource := <-p.resources
-		if err := p.release(resource); err != nil {
-			return err
+	for {
+		select {
+		case resource := <-p.resources:
+			if err := p.release(resource); err != nil {
+				return err
+			}
+		default:
+			return nil
 		}
 	}
-	// for resource := range p.resources {
-	// 	if err := p.release(resource); err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	return nil
 }
 
 // Close closes pool and releases all resources.

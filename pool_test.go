@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// go test -v -cover -count=1 -test.cpu=1 -run=^TestWithFastFailed$
+// go test -v -cover -run=^TestWithFastFailed$
 func TestPool(t *testing.T) {
 	limit := int64(16)
 	acquireLimit := int64(0)
