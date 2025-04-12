@@ -71,13 +71,17 @@ func WithFastFailed() Option {
 // WithPoolFullErr sets newPoolFullErr to config.
 func WithPoolFullErr(newPoolFullErr func(ctx context.Context) error) Option {
 	return func(conf *config) {
-		conf.newPoolFullErrFunc = newPoolFullErr
+		if newPoolFullErr != nil {
+			conf.newPoolFullErrFunc = newPoolFullErr
+		}
 	}
 }
 
 // WithPoolClosedErr sets newPoolClosedErr to config.
 func WithPoolClosedErr(newPoolClosedErr func(ctx context.Context) error) Option {
 	return func(conf *config) {
-		conf.newPoolClosedErrFunc = newPoolClosedErr
+		if newPoolClosedErr != nil {
+			conf.newPoolClosedErrFunc = newPoolClosedErr
+		}
 	}
 }

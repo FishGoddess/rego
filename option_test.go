@@ -32,6 +32,12 @@ func TestWithPoolFullErr(t *testing.T) {
 	if fmt.Sprintf("%p", conf.newPoolFullErrFunc) != fmt.Sprintf("%p", newPoolFullErr) {
 		t.Fatalf("conf.newPoolFullErr %p is wrong", conf.newPoolFullErrFunc)
 	}
+
+	WithPoolFullErr(nil)(conf)
+
+	if fmt.Sprintf("%p", conf.newPoolFullErrFunc) != fmt.Sprintf("%p", newPoolFullErr) {
+		t.Fatalf("conf.newPoolFullErr %p is wrong", conf.newPoolFullErrFunc)
+	}
 }
 
 // go test -v -cover -run=^TestWithPoolClosedErr$
@@ -42,6 +48,12 @@ func TestWithPoolClosedErr(t *testing.T) {
 
 	conf := &config{newPoolClosedErrFunc: nil}
 	WithPoolClosedErr(newPoolClosedErr)(conf)
+
+	if fmt.Sprintf("%p", conf.newPoolClosedErrFunc) != fmt.Sprintf("%p", newPoolClosedErr) {
+		t.Fatalf("conf.newPoolClosedErr %p is wrong", conf.newPoolClosedErrFunc)
+	}
+
+	WithPoolClosedErr(nil)(conf)
 
 	if fmt.Sprintf("%p", conf.newPoolClosedErrFunc) != fmt.Sprintf("%p", newPoolClosedErr) {
 		t.Fatalf("conf.newPoolClosedErr %p is wrong", conf.newPoolClosedErrFunc)
