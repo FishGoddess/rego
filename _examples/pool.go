@@ -26,6 +26,7 @@ func runServer() {
 		}
 
 		fmt.Println("server:", string(bs))
+		time.Sleep(100 * time.Millisecond)
 	})
 
 	if err := http.ListenAndServe("127.0.0.1:9876", nil); err != nil {
@@ -48,6 +49,7 @@ func releaseClient(client *http.Client) error {
 func main() {
 	// Prepare some backend resources.
 	ctx := context.Background()
+
 	go runServer()
 	time.Sleep(time.Second)
 
@@ -60,7 +62,7 @@ func main() {
 	defer pool.Close()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func(ii int) {
 			defer wg.Done()
@@ -79,6 +81,7 @@ func main() {
 
 			// Use the client whatever you want.
 			body := strings.NewReader(strconv.Itoa(ii))
+
 			_, err = client.Post("http://127.0.0.1:9876", "", body)
 			if err != nil {
 				panic(err)
@@ -87,5 +90,4 @@ func main() {
 	}
 
 	wg.Wait()
-	time.Sleep(time.Second)
 }

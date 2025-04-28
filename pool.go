@@ -126,7 +126,8 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	if p.closed {
 		p.lock.Unlock()
 
-		return resource, p.conf.newPoolClosedErr(ctx)
+		err = p.conf.newPoolClosedErr(ctx)
+		return resource, err
 	}
 
 	var ok bool
@@ -140,7 +141,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		p.acquired++
 		p.lock.Unlock()
 
-		// Increase the acquired and unlock before acquiring resource may cause the pool becomes full in advance.
+		// Increase the acquired and unlock before acquiring resource may cause the pool becomes exhausted in advance.
 		// So we should decrease the acquired if acquired failed.
 		defer func() {
 			if err != nil {
@@ -156,7 +157,8 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	if p.conf.fastFailed {
 		p.lock.Unlock()
 
-		return resource, p.conf.newPoolFullErr(ctx)
+		err = p.conf.newPoolExhaustedErr(ctx)
+		return resource, err
 	}
 
 	p.waiting++

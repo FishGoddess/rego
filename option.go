@@ -10,49 +10,43 @@ import (
 )
 
 var (
-	ErrPoolIsFull   = errors.New("rego: pool is full")
-	ErrPoolIsClosed = errors.New("rego: pool is closed")
+	ErrPoolExhausted = errors.New("rego: pool is exhausted")
+	ErrPoolClosed    = errors.New("rego: pool is closed")
 )
 
 type config struct {
 	fastFailed bool
 
-	newPoolFullErrFunc   func(ctx context.Context) error
-	newPoolClosedErrFunc func(ctx context.Context) error
+	newPoolExhaustedErrFunc func(ctx context.Context) error
+	newPoolClosedErrFunc    func(ctx context.Context) error
 }
 
 func newDefaultConfig() *config {
-	newPoolFullErr := func(_ context.Context) error {
-		return ErrPoolIsFull
+	newPoolExhaustedErr := func(_ context.Context) error {
+		return ErrPoolExhausted
 	}
 
 	newPoolClosedErr := func(_ context.Context) error {
-		return ErrPoolIsClosed
+		return ErrPoolClosed
 	}
 
 	conf := &config{
-		fastFailed:           false,
-		newPoolFullErrFunc:   newPoolFullErr,
-		newPoolClosedErrFunc: newPoolClosedErr,
+		fastFailed:              false,
+		newPoolExhaustedErrFunc: newPoolExhaustedErr,
+		newPoolClosedErrFunc:    newPoolClosedErr,
 	}
 
 	return conf
 }
 
-func (c *config) newPoolFullErr(ctx context.Context) error {
-	if c.newPoolFullErrFunc == nil {
-		return nil
-	}
-
-	return c.newPoolFullErrFunc(ctx)
+func (c *config) newPoolExhaustedErr(ctx context.Context) error {
+	newPoolExhaustedErr := c.newPoolExhaustedErrFunc
+	return newPoolExhaustedErr(ctx)
 }
 
 func (c *config) newPoolClosedErr(ctx context.Context) error {
-	if c.newPoolClosedErrFunc == nil {
-		return nil
-	}
-
-	return c.newPoolClosedErrFunc(ctx)
+	newPoolClosedErr := c.newPoolClosedErrFunc
+	return newPoolClosedErr(ctx)
 }
 
 type Option func(conf *config)
@@ -68,11 +62,11 @@ func WithFastFailed() Option {
 	}
 }
 
-// WithPoolFullErr sets newPoolFullErr to config.
-func WithPoolFullErr(newPoolFullErr func(ctx context.Context) error) Option {
+// WithPoolExhaustedErr sets newPoolExhaustedErr to config.
+func WithPoolExhaustedErr(newPoolExhaustedErr func(ctx context.Context) error) Option {
 	return func(conf *config) {
-		if newPoolFullErr != nil {
-			conf.newPoolFullErrFunc = newPoolFullErr
+		if newPoolExhaustedErr != nil {
+			conf.newPoolExhaustedErrFunc = newPoolExhaustedErr
 		}
 	}
 }
