@@ -24,10 +24,10 @@ type Status struct {
 }
 
 // AcquireFunc is a function acquires a new resource and returns error if failed.
-type AcquireFunc[T any] func() (T, error)
+type AcquireFunc[T any] func(ctx context.Context) (T, error)
 
 // ReleaseFunc is a function releases a resource and returns error if failed.
-type ReleaseFunc[T any] func(resource T) error
+type ReleaseFunc[T any] func(ctx context.Context, resource T) error
 
 // DefaultReleaseFunc is a default func to release a resource.
 // It does nothing to the resource.
@@ -76,19 +76,19 @@ func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], op
 	return pool
 }
 
-func (p *Pool[T]) Put(resource T) error {
+func (p *Pool[T]) Put(ctx context.Context, resource T) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
 	if p.closed {
-		return p.release(resource)
+		return p.release(ctx, resource)
 	}
 
 	select {
 	case p.resources <- resource:
 		return nil
 	default:
-		return p.release(resource)
+		return p.release(ctx, resource)
 	}
 }
 
@@ -108,7 +108,7 @@ func (p *Pool[T]) tryToTake() (resource T, ok bool) {
 //	sellock(scases, lockorder)
 //	sg := acquireSudog()
 //
-// We don't know what to do yet, but we think timeout mechanism should be supported even we haven't solved it.
+// We don't know how to solve it yet, but we think timeout mechanism should be supported even we haven't solved it.
 func (p *Pool[T]) waitToTake(ctx context.Context) (resource T, err error) {
 	select {
 	case resource = <-p.resources:
@@ -126,7 +126,8 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	if p.closed {
 		p.lock.Unlock()
 
-		return resource, p.conf.newPoolClosedErr(ctx)
+		err = p.conf.newPoolClosedErr(ctx)
+		return resource, err
 	}
 
 	var ok bool
@@ -140,8 +141,8 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		p.acquired++
 		p.lock.Unlock()
 
-		// Increase the acquired and unlock before acquiring resource may cause the pool becomes full in advance.
-		// So we should decrease the acquired if acquired failed.
+		// Increase the acquired and unlock before acquiring resource may cause the pool becomes exhausted in advance.
+		// We should decrease the acquired if acquired failed.
 		defer func() {
 			if err != nil {
 				p.lock.Lock()
@@ -150,13 +151,14 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 			}
 		}()
 
-		return p.acquire()
+		return p.acquire(ctx)
 	}
 
 	if p.conf.fastFailed {
 		p.lock.Unlock()
 
-		return resource, p.conf.newPoolFullErr(ctx)
+		err = p.conf.newPoolExhaustedErr(ctx)
+		return resource, err
 	}
 
 	p.waiting++
@@ -186,11 +188,11 @@ func (p *Pool[T]) Status() Status {
 	return status
 }
 
-func (p *Pool[T]) releaseResources() error {
+func (p *Pool[T]) releaseResources(ctx context.Context) error {
 	for {
 		select {
 		case resource := <-p.resources:
-			if err := p.release(resource); err != nil {
+			if err := p.release(ctx, resource); err != nil {
 				return err
 			}
 		default:
@@ -200,7 +202,7 @@ func (p *Pool[T]) releaseResources() error {
 }
 
 // Close closes pool and releases all resources.
-func (p *Pool[T]) Close() error {
+func (p *Pool[T]) Close(ctx context.Context) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -208,7 +210,7 @@ func (p *Pool[T]) Close() error {
 		return nil
 	}
 
-	if err := p.releaseResources(); err != nil {
+	if err := p.releaseResources(ctx); err != nil {
 		return err
 	}
 

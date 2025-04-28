@@ -13,24 +13,24 @@ import (
 )
 
 var (
-	errPoolIsFull   = errors.New("_examples: pool is full")
-	errPoolIsClosed = errors.New("_examples: pool is closed")
+	errPoolExhausted = errors.New("_examples: pool is exhausted")
+	errPoolClosed    = errors.New("_examples: pool is closed")
 )
 
-func acquire() (int, error) {
+func acquire(ctx context.Context) (int, error) {
 	return 0, nil
 }
 
-func release(resource int) error {
+func release(ctx context.Context, resource int) error {
 	return nil
 }
 
-func newPoolFullErr(ctx context.Context) error {
-	return errPoolIsFull
+func newPoolExhaustedErr(ctx context.Context) error {
+	return errPoolExhausted
 }
 
 func newPoolClosedErr(ctx context.Context) error {
-	return errPoolIsClosed
+	return errPoolClosed
 }
 
 func main() {
@@ -42,36 +42,36 @@ func main() {
 	resource, err := pool.Take(ctx)
 	fmt.Println(resource, err)
 
-	// However, the pool is full after taking one resource without putting.
-	// It will return a full error.
+	// However, the pool is exhausted after taking one resource without putting.
+	// It will return an exhausted error.
 	resource, err = pool.Take(ctx)
-	fmt.Println(resource, err, err == rego.ErrPoolIsFull)
+	fmt.Println(resource, err, err == rego.ErrPoolExhausted)
 
 	// Put the resource back to the pool.
-	pool.Put(resource)
-	pool.Close()
+	pool.Put(ctx, resource)
+	pool.Close(ctx)
 
 	// Now, the pool is closed so any taking from the pool will return a closed error.
 	resource, err = pool.Take(ctx)
-	fmt.Println(resource, err, err == rego.ErrPoolIsClosed)
+	fmt.Println(resource, err, err == rego.ErrPoolClosed)
 
 	// Create a pool with limit and fast-failed and new error funcs.
-	pool = rego.New(1, acquire, release, rego.WithFastFailed(), rego.WithPoolFullErr(newPoolFullErr), rego.WithPoolClosedErr(newPoolClosedErr))
+	pool = rego.New(1, acquire, release, rego.WithFastFailed(), rego.WithPoolExhaustedErr(newPoolExhaustedErr), rego.WithPoolClosedErr(newPoolClosedErr))
 
 	// Take one resource from pool which is ok.
 	resource, err = pool.Take(ctx)
 	fmt.Println(resource, err)
 
-	// However, the pool is full after taking one resource without putting.
-	// It will return a customizing full error.
+	// However, the pool is exhausted after taking one resource without putting.
+	// It will return a customizing exhausted error.
 	resource, err = pool.Take(ctx)
-	fmt.Println(resource, err, err == errPoolIsFull)
+	fmt.Println(resource, err, err == errPoolExhausted)
 
 	// Put the resource back to the pool.
-	pool.Put(resource)
-	pool.Close()
+	pool.Put(ctx, resource)
+	pool.Close(ctx)
 
 	// Now, the pool is closed so any taking from the pool will return a customizing closed error.
 	resource, err = pool.Take(ctx)
-	fmt.Println(resource, err, err == errPoolIsClosed)
+	fmt.Println(resource, err, err == errPoolClosed)
 }

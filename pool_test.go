@@ -12,26 +12,36 @@ import (
 	"time"
 )
 
-// go test -v -cover -run=^TestWithFastFailed$
+// go test -v -cover -run=^TestPool$
 func TestPool(t *testing.T) {
-	limit := int64(16)
+	ctx := context.Background()
+
+	limit := int64(64)
 	acquireLimit := int64(0)
 	releaseLimit := int64(0)
 
-	acquire := func() (int, error) {
+	acquire := func(acquireCtx context.Context) (int, error) {
+		if acquireCtx != ctx {
+			t.Fatal("acquireCtx != ctx", acquireCtx, ctx)
+		}
+
 		atomic.AddInt64(&acquireLimit, 1)
 		atomic.AddInt64(&releaseLimit, 1)
 		return 0, nil
 	}
 
-	release := func(resource int) error {
+	release := func(releaseCtx context.Context, resource int) error {
+		if releaseCtx != ctx {
+			t.Fatal("releaseCtx != ctx", releaseCtx, ctx)
+		}
+
 		atomic.AddInt64(&releaseLimit, -1)
 		return nil
 	}
 
 	pool := New(uint64(limit), acquire, release)
 	defer func() {
-		pool.Close()
+		pool.Close(ctx)
 
 		if acquireLimit != limit {
 			t.Fatalf("acquireLimit %d != limit %d", acquireLimit, limit)
@@ -62,13 +72,13 @@ func TestPool(t *testing.T) {
 	}()
 
 	for i := 0; i < 1024; i++ {
-		resource, err := pool.Take(context.Background())
+		resource, err := pool.Take(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		time.Sleep(5 * time.Millisecond)
-		pool.Put(resource)
+		pool.Put(ctx, resource)
 
 		status := pool.Status()
 		if status.Acquired != 1 {
@@ -83,19 +93,19 @@ func TestPool(t *testing.T) {
 	t.Logf("%+v", pool.Status())
 
 	var wg sync.WaitGroup
-	for i := 0; i < 4096; i++ {
+	for i := 0; i < 65536; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			resource, err := pool.Take(context.Background())
+			resource, err := pool.Take(ctx)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 
-			time.Sleep(20 * time.Millisecond)
-			pool.Put(resource)
+			time.Sleep(5 * time.Millisecond)
+			pool.Put(ctx, resource)
 
 			status := pool.Status()
 			if status.Acquired > pool.limit {

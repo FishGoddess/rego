@@ -20,23 +20,23 @@ func TestWithFastFailed(t *testing.T) {
 	}
 }
 
-// go test -v -cover -run=^TestWithPoolFullErr$
-func TestWithPoolFullErr(t *testing.T) {
-	newPoolFullErr := func(ctx context.Context) error {
+// go test -v -cover -run=^TestWithPoolExhaustedErr$
+func TestWithPoolExhaustedErr(t *testing.T) {
+	newPoolExhaustedErr := func(ctx context.Context) error {
 		return nil
 	}
 
-	conf := &config{newPoolFullErrFunc: nil}
-	WithPoolFullErr(newPoolFullErr)(conf)
+	conf := &config{newPoolExhaustedErrFunc: nil}
+	WithPoolExhaustedErr(newPoolExhaustedErr)(conf)
 
-	if fmt.Sprintf("%p", conf.newPoolFullErrFunc) != fmt.Sprintf("%p", newPoolFullErr) {
-		t.Fatalf("conf.newPoolFullErr %p is wrong", conf.newPoolFullErrFunc)
+	if fmt.Sprintf("%p", conf.newPoolExhaustedErrFunc) != fmt.Sprintf("%p", newPoolExhaustedErr) {
+		t.Fatalf("conf.newPoolExhaustedErr %p is wrong", conf.newPoolExhaustedErrFunc)
 	}
 
-	WithPoolFullErr(nil)(conf)
+	WithPoolExhaustedErr(nil)(conf)
 
-	if fmt.Sprintf("%p", conf.newPoolFullErrFunc) != fmt.Sprintf("%p", newPoolFullErr) {
-		t.Fatalf("conf.newPoolFullErr %p is wrong", conf.newPoolFullErrFunc)
+	if fmt.Sprintf("%p", conf.newPoolExhaustedErrFunc) != fmt.Sprintf("%p", newPoolExhaustedErr) {
+		t.Fatalf("conf.newPoolExhaustedErr %p is wrong", conf.newPoolExhaustedErrFunc)
 	}
 }
 

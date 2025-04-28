@@ -1,4 +1,12 @@
-## 📜 历史版本的特性介绍 (Features in old versions)
+## 📜 历史版本的特性介绍
+
+### v0.2.2
+
+> 此版本发布于 2025-04-29
+
+* Acquire 函数支持 context 的透传
+* Release 函数支持 context 的透传
+* 调整错误类型，调整错误处理选项函数
 
 ### v0.2.1
 
