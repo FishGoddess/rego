@@ -5,13 +5,16 @@
 [![Coverage](_icons/coverage.svg)](_icons/coverage.svg)
 ![Test](https://github.com/FishGoddess/rego/actions/workflows/test.yml/badge.svg)
 
-**Rego** is a resource pool library which is used for controlling and reusing some resources like network connection.
+**Rego** is a resource pool used for reusing some resources like network connections.
 
 [阅读中文版的文档](./README.md)
 
 ### 🍭 Features
 
-* Based resource pool, which can limit the count of resources.
+* Reuse resources by limiting the quantity of resources
+* Error handling callback for different errors
+* Check pool status like acquired and idle quantity
+* Passing context to callbacks
 
 _Check [HISTORY.md](./HISTORY.md) and [FUTURE.md](./FUTURE.md) to know about more information._
 
@@ -33,23 +36,26 @@ import (
 )
 
 // acquireConn acquires a new conn, and returns an error if failed.
-func acquireConn() (net.Conn, error) {
+func acquireConn(ctx context.Context) (net.Conn, error) {
 	// Guess this ip is from which websites?
-	return net.Dial("tcp", "20.205.243.166:80")
+	var dialer net.Dialer
+	return dialer.DialContext(ctx, "tcp", "20.205.243.166:80")
 }
 
 // releaseConn releases the given conn, and returns an error if failed.
-func releaseConn(conn net.Conn) error {
+func releaseConn(ctx context.Context, conn net.Conn) error {
 	return conn.Close()
 }
 
 func main() {
 	// Create a resource pool which type is net.Conn and limit is 64.
+	ctx := context.Background()
+
 	pool := rego.New(64, acquireConn, releaseConn)
-	defer pool.Close()
+	defer pool.Close(ctx)
 
 	// Take a resource from pool.
-	conn, err := pool.Take(context.Background())
+	conn, err := pool.Take(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +63,7 @@ func main() {
 	// Remember put the client to pool when your using is done.
 	// This is why we call the resource in pool is reusable.
 	// We recommend you to do this job in a defer function.
-	defer pool.Put(conn)
+	defer pool.Put(ctx, conn)
 
 	// Use the conn
 	fmt.Println(conn.RemoteAddr())

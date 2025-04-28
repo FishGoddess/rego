@@ -26,7 +26,7 @@ func runServer() {
 		}
 
 		fmt.Println("server:", string(bs))
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(time.Second)
 	})
 
 	if err := http.ListenAndServe("127.0.0.1:9876", nil); err != nil {
@@ -35,13 +35,13 @@ func runServer() {
 }
 
 // acquireClient acquires a new http client, and returns an error if failed.
-func acquireClient() (*http.Client, error) {
+func acquireClient(ctx context.Context) (*http.Client, error) {
 	fmt.Println("acquire client...")
 	return &http.Client{}, nil
 }
 
 // releaseClient releases the given client, and returns an error if failed.
-func releaseClient(client *http.Client) error {
+func releaseClient(ctx context.Context, client *http.Client) error {
 	fmt.Println("release client...")
 	return nil
 }
@@ -59,10 +59,10 @@ func main() {
 	// The release function is for releasing the given resource, and you can destroy everything of your resource.
 	// Also, you can specify some options to change the default settings.
 	pool := rego.New(4, acquireClient, releaseClient)
-	defer pool.Close()
+	defer pool.Close(ctx)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func(ii int) {
 			defer wg.Done()
@@ -77,7 +77,7 @@ func main() {
 			// Remember put the client to pool when your using is done.
 			// This is why we call the resource in pool is reusable.
 			// We recommend you to do this job in a defer function.
-			defer pool.Put(client)
+			defer pool.Put(ctx, client)
 
 			// Use the client whatever you want.
 			body := strings.NewReader(strconv.Itoa(ii))
