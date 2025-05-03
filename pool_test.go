@@ -57,8 +57,8 @@ func TestPool(t *testing.T) {
 			status := pool.Status()
 			t.Logf("%+v", status)
 
-			if status.Acquired > pool.limit {
-				t.Errorf("status.Acquired %d is wrong", status.Acquired)
+			if status.Active > pool.limit {
+				t.Errorf("status.Active %d is wrong", status.Active)
 				return
 			}
 
@@ -71,7 +71,8 @@ func TestPool(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < 1024; i++ {
+	totalTaken1 := 1024
+	for i := 0; i < totalTaken1; i++ {
 		resource, err := pool.Take(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -81,19 +82,32 @@ func TestPool(t *testing.T) {
 		pool.Put(ctx, resource)
 
 		status := pool.Status()
-		if status.Acquired != 1 {
-			t.Fatalf("status.Acquired %d is wrong", status.Acquired)
+		if status.Active != 1 {
+			t.Fatalf("status.Active %d is wrong", status.Active)
 		}
 
 		if status.Idle != 1 {
 			t.Fatalf("status.Idle %d is wrong", status.Idle)
 		}
+
+		if status.AverageWaitDuration != 0 {
+			t.Fatalf("status.AverageWaitDuration %d is wrong", status.AverageWaitDuration)
+		}
 	}
 
 	t.Logf("%+v", pool.Status())
 
+	if pool.totalTaken != uint64(totalTaken1) {
+		t.Fatalf("pool.totalTaken %d is wrong", pool.totalTaken)
+	}
+
+	if pool.totalWaitedDuration != 0 {
+		t.Fatalf("pool.totalWaitedDuration %d is wrong", pool.totalWaitedDuration)
+	}
+
 	var wg sync.WaitGroup
-	for i := 0; i < 65536; i++ {
+	totalTaken2 := 65536
+	for i := 0; i < totalTaken2; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -108,8 +122,8 @@ func TestPool(t *testing.T) {
 			pool.Put(ctx, resource)
 
 			status := pool.Status()
-			if status.Acquired > pool.limit {
-				t.Errorf("status.Acquired %d is wrong", status.Acquired)
+			if status.Active > pool.limit {
+				t.Errorf("status.Active %d is wrong", status.Active)
 				return
 			}
 
@@ -121,5 +135,35 @@ func TestPool(t *testing.T) {
 	}
 
 	wg.Wait()
+	t.Logf("%+v", pool.Status())
+
+	if pool.totalTaken != uint64(totalTaken1)+uint64(totalTaken2) {
+		t.Fatalf("pool.totalTaken %d is wrong", pool.totalTaken)
+	}
+
+	totalTaken1 = 4096
+	for i := 0; i < totalTaken1; i++ {
+		resource, err := pool.Take(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		time.Sleep(time.Millisecond)
+		pool.Put(ctx, resource)
+
+		status := pool.Status()
+		if status.Active != uint64(limit) {
+			t.Fatalf("status.Active %d is wrong", status.Active)
+		}
+
+		if status.Idle != uint64(limit) {
+			t.Fatalf("status.Idle %d is wrong", status.Idle)
+		}
+
+		if status.AverageWaitDuration == 0 {
+			t.Fatalf("status.AverageWaitDuration %d is wrong", status.AverageWaitDuration)
+		}
+	}
+
 	t.Logf("%+v", pool.Status())
 }

@@ -90,4 +90,5 @@ func main() {
 	}
 
 	wg.Wait()
+	fmt.Printf("pool status: %+v\n", pool.Status())
 }

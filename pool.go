@@ -7,20 +7,25 @@ package rego
 import (
 	"context"
 	"sync"
+	"time"
 )
 
+// Status is the statistics of pool.
 type Status struct {
-	// Limit is the limit of acquired resources.
+	// Limit is the maximum quantity of resources in pool.
 	Limit uint64 `json:"limit"`
 
-	// Acquired is the count of acquired resources.
-	Acquired uint64 `json:"acquired"`
+	// Active is the quantity of resources in pool including idle and using.
+	Active uint64 `json:"active"`
 
-	// Idle is the count of idle resources.
+	// Idle is the quantity of idle resources in pool.
 	Idle uint64 `json:"idle"`
 
-	// Waiting is the count of waiting for a resource.
+	// Waiting is the quantity of waiting for a resource.
 	Waiting uint64 `json:"waiting"`
+
+	// AverageWaitDuration is the average wait duration for new resources.
+	AverageWaitDuration time.Duration `json:"average_wait_duration"`
 }
 
 // AcquireFunc is a function acquires a new resource and returns error if failed.
@@ -35,15 +40,20 @@ func DefaultReleaseFunc[T any](resource T) error {
 	return nil
 }
 
+// Pool stores resources for reusing.
 type Pool[T any] struct {
 	conf config
 
 	acquire AcquireFunc[T]
 	release ReleaseFunc[T]
 
-	limit     uint64
-	acquired  uint64
-	waiting   uint64
+	limit   uint64
+	active  uint64
+	waiting uint64
+
+	totalTaken          uint64
+	totalWaitedDuration time.Duration
+
 	resources chan T
 	closed    bool
 
@@ -130,6 +140,8 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return resource, err
 	}
 
+	p.totalTaken++
+
 	var ok bool
 	if resource, ok = p.tryToTake(); ok {
 		p.lock.Unlock()
@@ -137,16 +149,16 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return resource, nil
 	}
 
-	if p.acquired < p.limit {
-		p.acquired++
+	if p.active < p.limit {
+		// Increase the active and unlock here may cause the pool becomes exhausted in advance.
+		// However, we think this is acceptable in most situations.
+		p.active++
 		p.lock.Unlock()
 
-		// Increase the acquired and unlock before acquiring resource may cause the pool becomes exhausted in advance.
-		// We should decrease the acquired if acquired failed.
 		defer func() {
 			if err != nil {
 				p.lock.Lock()
-				p.acquired--
+				p.active--
 				p.lock.Unlock()
 			}
 		}()
@@ -161,12 +173,17 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return resource, err
 	}
 
+	startTime := time.Now()
+
 	p.waiting++
 	p.lock.Unlock()
 
 	defer func() {
+		waitDuration := time.Since(startTime)
+
 		p.lock.Lock()
 		p.waiting--
+		p.totalWaitedDuration += waitDuration
 		p.lock.Unlock()
 	}()
 
@@ -178,11 +195,17 @@ func (p *Pool[T]) Status() Status {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
+	var averageWaitDuration time.Duration
+	if p.totalTaken > 0 {
+		averageWaitDuration = p.totalWaitedDuration / time.Duration(p.totalTaken)
+	}
+
 	status := Status{
-		Limit:    p.limit,
-		Acquired: p.acquired,
-		Idle:     uint64(len(p.resources)),
-		Waiting:  p.waiting,
+		Limit:               p.limit,
+		Active:              p.active,
+		Idle:                uint64(len(p.resources)),
+		Waiting:             p.waiting,
+		AverageWaitDuration: averageWaitDuration,
 	}
 
 	return status
@@ -214,8 +237,10 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 		return err
 	}
 
-	p.acquired = 0
+	p.active = 0
 	p.waiting = 0
+	p.totalTaken = 0
+	p.totalWaitedDuration = 0
 	p.closed = true
 
 	close(p.resources)
