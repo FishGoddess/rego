@@ -21,20 +21,20 @@ func TestPoolStatus(t *testing.T) {
 		waiting:             8,
 		totalWaited:         0,
 		totalWaitedDuration: 0,
-		resources:           make(chan int, limit),
+		resourceCh:          make(chan int, limit),
 	}
 
 	ctx := context.Background()
 	defer pool.Close(ctx)
 
 	for i := range limit {
-		pool.resources <- i
+		pool.resourceCh <- i
 	}
 
 	poolStatus := PoolStatus{
 		Limit:               pool.limit,
 		Active:              pool.active,
-		Idle:                uint64(len(pool.resources)),
+		Idle:                uint64(len(pool.resourceCh)),
 		Waiting:             pool.waiting,
 		AverageWaitDuration: 0,
 	}

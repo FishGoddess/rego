@@ -18,13 +18,14 @@ func DefaultReleaseFunc[T any](ctx context.Context, resource T) error {
 	return nil
 }
 
+type token struct{}
+
 // AcquireFunc is a function acquires a new resource and returns error if failed.
 type AcquireFunc[T any] func(ctx context.Context) (T, error)
 
 // ReleaseFunc is a function releases a resource and returns error if failed.
 type ReleaseFunc[T any] func(ctx context.Context, resource T) error
 
-// Pool stores resources for reusing.
 type Pool[T any] struct {
 	conf config
 
@@ -33,13 +34,15 @@ type Pool[T any] struct {
 
 	limit   uint64
 	active  uint64
+	idle    uint64
 	waiting uint64
 
 	totalWaited         uint64
 	totalWaitedDuration time.Duration
 
-	resources chan T
-	closed    bool
+	resourceCh chan T
+	tokens     chan token
+	closed     bool
 
 	lock sync.RWMutex
 }
@@ -59,12 +62,17 @@ func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], op
 	}
 
 	pool := &Pool[T]{
-		conf:      *conf,
-		limit:     limit,
-		acquire:   acquire,
-		release:   release,
-		resources: make(chan T, limit),
-		closed:    false,
+		conf:       *conf,
+		limit:      limit,
+		acquire:    acquire,
+		release:    release,
+		resourceCh: make(chan T, limit),
+		tokens:     make(chan token, limit),
+		closed:     false,
+	}
+
+	for range limit {
+		pool.tokens <- token{}
 	}
 
 	return pool
@@ -79,7 +87,7 @@ func (p *Pool[T]) Put(ctx context.Context, resource T) error {
 	}
 
 	select {
-	case p.resources <- resource:
+	case p.resourceCh <- resource:
 		return nil
 	default:
 		return p.release(ctx, resource)
@@ -88,7 +96,7 @@ func (p *Pool[T]) Put(ctx context.Context, resource T) error {
 
 func (p *Pool[T]) tryToTake() (resource T, ok bool) {
 	select {
-	case resource = <-p.resources:
+	case resource = <-p.resourceCh:
 		return resource, true
 	default:
 		return resource, false
@@ -105,7 +113,7 @@ func (p *Pool[T]) tryToTake() (resource T, ok bool) {
 // We don't know how to solve it yet, but we think timeout mechanism should be supported even we haven't solved it.
 func (p *Pool[T]) waitToTake(ctx context.Context) (resource T, err error) {
 	select {
-	case resource = <-p.resources:
+	case resource = <-p.resourceCh:
 		return resource, nil
 	case <-ctx.Done():
 		return resource, ctx.Err()
@@ -186,7 +194,7 @@ func (p *Pool[T]) Status() PoolStatus {
 	status := PoolStatus{
 		Limit:               p.limit,
 		Active:              p.active,
-		Idle:                uint64(len(p.resources)),
+		Idle:                uint64(len(p.resourceCh)),
 		Waiting:             p.waiting,
 		AverageWaitDuration: averageWaitDuration,
 	}
@@ -197,7 +205,7 @@ func (p *Pool[T]) Status() PoolStatus {
 func (p *Pool[T]) releaseResources(ctx context.Context) error {
 	for {
 		select {
-		case resource := <-p.resources:
+		case resource := <-p.resourceCh:
 			if err := p.release(ctx, resource); err != nil {
 				return err
 			}
@@ -226,6 +234,6 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 	p.totalWaitedDuration = 0
 	p.closed = true
 
-	close(p.resources)
+	close(p.resourceCh)
 	return nil
 }
