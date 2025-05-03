@@ -13,7 +13,7 @@
 
 * Reuse resources by limiting the quantity of resources
 * Error handling callback for different errors
-* Check pool status like acquired and idle quantity
+* Check pool statistics like active and idle quantity of resources
 * Passing context to callbacks
 
 _Check [HISTORY.md](./HISTORY.md) and [FUTURE.md](./FUTURE.md) to know about more information._
