@@ -10,22 +10,12 @@ import (
 	"time"
 )
 
-// Status is the statistics of pool.
-type Status struct {
-	// Limit is the maximum quantity of resources in pool.
-	Limit uint64 `json:"limit"`
+var _ ReleaseFunc[int] = DefaultReleaseFunc[int]
 
-	// Active is the quantity of resources in pool including idle and using.
-	Active uint64 `json:"active"`
-
-	// Idle is the quantity of idle resources in pool.
-	Idle uint64 `json:"idle"`
-
-	// Waiting is the quantity of waiting for a resource.
-	Waiting uint64 `json:"waiting"`
-
-	// AverageWaitDuration is the average wait duration for new resources.
-	AverageWaitDuration time.Duration `json:"average_wait_duration"`
+// DefaultReleaseFunc is a default func to release a resource.
+// It does nothing to the resource.
+func DefaultReleaseFunc[T any](ctx context.Context, resource T) error {
+	return nil
 }
 
 // AcquireFunc is a function acquires a new resource and returns error if failed.
@@ -33,12 +23,6 @@ type AcquireFunc[T any] func(ctx context.Context) (T, error)
 
 // ReleaseFunc is a function releases a resource and returns error if failed.
 type ReleaseFunc[T any] func(ctx context.Context, resource T) error
-
-// DefaultReleaseFunc is a default func to release a resource.
-// It does nothing to the resource.
-func DefaultReleaseFunc[T any](resource T) error {
-	return nil
-}
 
 // Pool stores resources for reusing.
 type Pool[T any] struct {
@@ -51,7 +35,7 @@ type Pool[T any] struct {
 	active  uint64
 	waiting uint64
 
-	totalTaken          uint64
+	totalWaited         uint64
 	totalWaitedDuration time.Duration
 
 	resources chan T
@@ -140,8 +124,6 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return resource, err
 	}
 
-	p.totalTaken++
-
 	var ok bool
 	if resource, ok = p.tryToTake(); ok {
 		p.lock.Unlock()
@@ -183,6 +165,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 
 		p.lock.Lock()
 		p.waiting--
+		p.totalWaited++
 		p.totalWaitedDuration += waitDuration
 		p.lock.Unlock()
 	}()
@@ -190,17 +173,17 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	return p.waitToTake(ctx)
 }
 
-// Status returns the status of the pool.
-func (p *Pool[T]) Status() Status {
+// Status returns the statistics of the pool.
+func (p *Pool[T]) Status() PoolStatus {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
 	var averageWaitDuration time.Duration
-	if p.totalTaken > 0 {
-		averageWaitDuration = p.totalWaitedDuration / time.Duration(p.totalTaken)
+	if p.totalWaited > 0 {
+		averageWaitDuration = p.totalWaitedDuration / time.Duration(p.totalWaited)
 	}
 
-	status := Status{
+	status := PoolStatus{
 		Limit:               p.limit,
 		Active:              p.active,
 		Idle:                uint64(len(p.resources)),
@@ -239,7 +222,7 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 
 	p.active = 0
 	p.waiting = 0
-	p.totalTaken = 0
+	p.totalWaited = 0
 	p.totalWaitedDuration = 0
 	p.closed = true
 
