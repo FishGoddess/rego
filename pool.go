@@ -51,7 +51,7 @@ type Pool[T any] struct {
 	active  uint64
 	waiting uint64
 
-	totalTaken          uint64
+	totalWaited         uint64
 	totalWaitedDuration time.Duration
 
 	resources chan T
@@ -140,8 +140,6 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return resource, err
 	}
 
-	p.totalTaken++
-
 	var ok bool
 	if resource, ok = p.tryToTake(); ok {
 		p.lock.Unlock()
@@ -183,6 +181,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 
 		p.lock.Lock()
 		p.waiting--
+		p.totalWaited++
 		p.totalWaitedDuration += waitDuration
 		p.lock.Unlock()
 	}()
@@ -196,8 +195,8 @@ func (p *Pool[T]) Status() Status {
 	defer p.lock.RUnlock()
 
 	var averageWaitDuration time.Duration
-	if p.totalTaken > 0 {
-		averageWaitDuration = p.totalWaitedDuration / time.Duration(p.totalTaken)
+	if p.totalWaited > 0 {
+		averageWaitDuration = p.totalWaitedDuration / time.Duration(p.totalWaited)
 	}
 
 	status := Status{
@@ -239,7 +238,7 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 
 	p.active = 0
 	p.waiting = 0
-	p.totalTaken = 0
+	p.totalWaited = 0
 	p.totalWaitedDuration = 0
 	p.closed = true
 

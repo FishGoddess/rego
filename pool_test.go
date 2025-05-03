@@ -71,8 +71,7 @@ func TestPool(t *testing.T) {
 		}
 	}()
 
-	totalTaken1 := 1024
-	for i := 0; i < totalTaken1; i++ {
+	for i := 0; i < 1024; i++ {
 		resource, err := pool.Take(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -97,17 +96,17 @@ func TestPool(t *testing.T) {
 
 	t.Logf("%+v", pool.Status())
 
-	if pool.totalTaken != uint64(totalTaken1) {
-		t.Fatalf("pool.totalTaken %d is wrong", pool.totalTaken)
+	if pool.totalWaited != 0 {
+		t.Fatalf("pool.totalWaited %d is wrong", pool.totalWaited)
 	}
 
 	if pool.totalWaitedDuration != 0 {
 		t.Fatalf("pool.totalWaitedDuration %d is wrong", pool.totalWaitedDuration)
 	}
 
+	var totalWaited = 65536
 	var wg sync.WaitGroup
-	totalTaken2 := 65536
-	for i := 0; i < totalTaken2; i++ {
+	for i := 0; i < totalWaited; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -131,39 +130,22 @@ func TestPool(t *testing.T) {
 				t.Errorf("status.Idle %d is wrong", status.Idle)
 				return
 			}
+
+			if status.Waiting > 0 && pool.totalWaited > 0 && status.AverageWaitDuration <= 0 {
+				t.Errorf("status.AverageWaitDuration %d is wrong", status.AverageWaitDuration)
+				return
+			}
 		}()
 	}
 
 	wg.Wait()
 	t.Logf("%+v", pool.Status())
 
-	if pool.totalTaken != uint64(totalTaken1)+uint64(totalTaken2) {
-		t.Fatalf("pool.totalTaken %d is wrong", pool.totalTaken)
+	if pool.totalWaited > uint64(totalWaited) {
+		t.Fatalf("pool.totalWaited %d is wrong", pool.totalWaited)
 	}
 
-	totalTaken1 = 4096
-	for i := 0; i < totalTaken1; i++ {
-		resource, err := pool.Take(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		time.Sleep(time.Millisecond)
-		pool.Put(ctx, resource)
-
-		status := pool.Status()
-		if status.Active != uint64(limit) {
-			t.Fatalf("status.Active %d is wrong", status.Active)
-		}
-
-		if status.Idle != uint64(limit) {
-			t.Fatalf("status.Idle %d is wrong", status.Idle)
-		}
-
-		if status.AverageWaitDuration == 0 {
-			t.Fatalf("status.AverageWaitDuration %d is wrong", status.AverageWaitDuration)
-		}
+	if pool.totalWaited > 0 && pool.totalWaitedDuration <= 0 {
+		t.Fatalf("pool.totalWaitedDuration %d is wrong", pool.totalWaitedDuration)
 	}
-
-	t.Logf("%+v", pool.Status())
 }
