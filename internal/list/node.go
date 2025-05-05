@@ -18,6 +18,7 @@ var (
 	nowFunc = time.Now
 )
 
+// Node wraps a value with create time and update time.
 type Node[T any] struct {
 	value T
 
@@ -25,6 +26,7 @@ type Node[T any] struct {
 	updateTime time.Time
 }
 
+// NewNode creates a node with value.
 func NewNode[T any](value T) *Node[T] {
 	now := nowFunc()
 
@@ -37,6 +39,7 @@ func NewNode[T any](value T) *Node[T] {
 	return node
 }
 
+// String stringifies a node with specified format.
 func (n *Node[T]) String() string {
 	bs := make([]byte, 0, 64)
 
@@ -46,4 +49,9 @@ func (n *Node[T]) String() string {
 	bs = append(bs, fieldSeparator)
 	bs = n.updateTime.AppendFormat(bs, timeFormat)
 	return string(bs)
+}
+
+// Value returns the value in node.
+func (n *Node[T]) Value() T {
+	return n.value
 }

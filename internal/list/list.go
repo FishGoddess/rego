@@ -10,10 +10,12 @@ import (
 	"time"
 )
 
+// List stores some nodes with time control mechanism.
 type List[T any] struct {
 	nodeList *list.List
 }
 
+// NewList creates an empty list.
 func NewList[T any]() *List[T] {
 	list := &List[T]{
 		nodeList: list.New(),
@@ -22,6 +24,7 @@ func NewList[T any]() *List[T] {
 	return list
 }
 
+// String stringifies a list with specified format.
 func (l *List[T]) String() string {
 	var builder strings.Builder
 
@@ -45,10 +48,12 @@ func (l *List[T]) String() string {
 	return builder.String()
 }
 
+// Push pushes a node to list.
 func (l *List[T]) Push(node *Node[T]) {
 	l.nodeList.PushBack(node)
 }
 
+// Pop pops a node from list.
 func (l *List[T]) Pop() (node *Node[T], ok bool) {
 	front := l.nodeList.Front()
 	if front == nil {
@@ -59,6 +64,7 @@ func (l *List[T]) Pop() (node *Node[T], ok bool) {
 	return node, ok
 }
 
+// Remove removes the nodes whose create time is earlier than the given create time.
 func (l *List[T]) Remove(createTime time.Time) {
 	elem := l.nodeList.Front()
 	for elem != nil {
@@ -78,6 +84,7 @@ func (l *List[T]) Remove(createTime time.Time) {
 	}
 }
 
-func (l *List[T]) Len() int {
-	return l.nodeList.Len()
+// Len returns the length of list.
+func (l *List[T]) Len() uint64 {
+	return uint64(l.nodeList.Len())
 }

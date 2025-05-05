@@ -41,3 +41,12 @@ func TestNewNode(t *testing.T) {
 		t.Fatalf("got string %s != want string %s", gotString, wantString)
 	}
 }
+
+// go test -v -cover -run=^TestNodeValue$
+func TestNodeValue(t *testing.T) {
+	node := NewNode(1)
+
+	if node.Value() != node.value {
+		t.Fatalf("node.Value() %d != node.value %d", node.Value(), node.value)
+	}
+}

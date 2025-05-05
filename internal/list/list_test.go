@@ -63,7 +63,7 @@ func TestList(t *testing.T) {
 
 	nodes := make([]*Node[int], 0, 3)
 	list := NewList[int]()
-	length := 0
+	length := uint64(0)
 
 	nowFunc = func() time.Time {
 		return time.Date(2025, 5, 3, 22, 17, 8, 0, time.Local)
@@ -103,7 +103,7 @@ func TestList(t *testing.T) {
 		t.Fatalf("list.Len() %d != length %d", list.Len(), length)
 	}
 
-	if list.Len() != len(nodes) {
+	if list.Len() != uint64(len(nodes)) {
 		t.Fatalf("list.Len() %d != len(nodes) %d", list.Len(), len(nodes))
 	}
 
@@ -132,7 +132,7 @@ func TestList(t *testing.T) {
 // go test -v -cover -run=^TestListRemove$
 func TestListRemove(t *testing.T) {
 	list := NewList[int]()
-	length := 0
+	length := uint64(0)
 
 	nowFunc = func() time.Time {
 		return time.Date(2025, 5, 3, 22, 17, 8, 0, time.Local)
