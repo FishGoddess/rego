@@ -14,11 +14,27 @@ const (
 	timeFormat     = "2006-01-02 15:04:05"
 )
 
+var (
+	nowFunc = time.Now
+)
+
 type Node[T any] struct {
 	value T
 
 	createTime time.Time
 	updateTime time.Time
+}
+
+func NewNode[T any](value T) *Node[T] {
+	now := nowFunc()
+
+	node := &Node[T]{
+		value:      value,
+		createTime: now,
+		updateTime: now,
+	}
+
+	return node
 }
 
 func (n *Node[T]) String() string {
