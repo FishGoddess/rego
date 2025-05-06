@@ -40,7 +40,7 @@ type Pool[T any] struct {
 	totalWaited         uint64
 	totalWaitedDuration time.Duration
 
-	tokens    *token.TokenBucket
+	tokens    *token.Bucket
 	resources *list.List[T]
 	closed    bool
 

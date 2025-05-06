@@ -8,12 +8,12 @@ import "context"
 
 type Token struct{}
 
-type TokenBucket struct {
+type Bucket struct {
 	tokens chan Token
 }
 
-func NewBucket(limit uint64) *TokenBucket {
-	bucket := &TokenBucket{
+func NewBucket(limit uint64) *Bucket {
+	bucket := &Bucket{
 		tokens: make(chan Token, limit),
 	}
 
@@ -25,9 +25,9 @@ func NewBucket(limit uint64) *TokenBucket {
 }
 
 // ConsumeToken consumes a token from bucket and waits util context done if there is no token.
-func (tb *TokenBucket) ConsumeToken(ctx context.Context) error {
+func (b *Bucket) ConsumeToken(ctx context.Context) error {
 	select {
-	case <-tb.tokens:
+	case <-b.tokens:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -35,9 +35,9 @@ func (tb *TokenBucket) ConsumeToken(ctx context.Context) error {
 }
 
 // ProduceToken produces a token to bucket.
-func (tb *TokenBucket) ProduceToken() {
+func (b *Bucket) ProduceToken() {
 	select {
-	case tb.tokens <- Token{}:
+	case b.tokens <- Token{}:
 		return
 	default:
 		return
@@ -45,7 +45,7 @@ func (tb *TokenBucket) ProduceToken() {
 }
 
 // Close closes the bucket.
-func (tb *TokenBucket) Close() error {
-	close(tb.tokens)
+func (b *Bucket) Close() error {
+	close(b.tokens)
 	return nil
 }

@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// go test -v -cover -run=^TestTokenBucket$
-func TestTokenBucket(t *testing.T) {
+// go test -v -cover -run=^TestBucket$
+func TestBucket(t *testing.T) {
 	ctx := context.Background()
 
 	limit := 16
