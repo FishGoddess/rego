@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/FishGoddess/rego/pkg/list"
+	"github.com/FishGoddess/rego/pkg/token"
 )
 
 var _ ReleaseFunc[int] = DefaultReleaseFunc[int]
@@ -19,8 +20,6 @@ var _ ReleaseFunc[int] = DefaultReleaseFunc[int]
 func DefaultReleaseFunc[T any](ctx context.Context, resource T) error {
 	return nil
 }
-
-type token struct{}
 
 // AcquireFunc is a function acquires a new resource and returns error if failed.
 type AcquireFunc[T any] func(ctx context.Context) (T, error)
@@ -41,7 +40,7 @@ type Pool[T any] struct {
 	totalWaited         uint64
 	totalWaitedDuration time.Duration
 
-	tokens    chan token
+	tokens    *token.TokenBucket
 	resources *list.List[T]
 	closed    bool
 
@@ -67,13 +66,9 @@ func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], op
 		limit:     limit,
 		acquire:   acquire,
 		release:   release,
-		tokens:    make(chan token, limit),
+		tokens:    token.NewBucket(limit),
 		resources: list.New[T](),
 		closed:    false,
-	}
-
-	for range limit {
-		pool.tokens <- token{}
 	}
 
 	return pool
@@ -124,12 +119,7 @@ func (p *Pool[T]) acquireToken(ctx context.Context) (err error) {
 		}
 	}()
 
-	select {
-	case <-p.tokens:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return p.tokens.ConsumeToken(ctx)
 }
 
 func (p *Pool[T]) releaseToken() {
@@ -137,12 +127,7 @@ func (p *Pool[T]) releaseToken() {
 		return
 	}
 
-	select {
-	case p.tokens <- token{}:
-		return
-	default:
-		return
-	}
+	p.tokens.ProduceToken()
 }
 
 func (p *Pool[T]) tryToTake() (resource T, ok bool) {
@@ -220,19 +205,6 @@ func (p *Pool[T]) Status() PoolStatus {
 	return status
 }
 
-func (p *Pool[T]) releaseResources(ctx context.Context) error {
-	for {
-		resource, ok := p.resources.Pop()
-		if !ok {
-			return nil
-		}
-
-		if err := p.release(ctx, resource); err != nil {
-			return err
-		}
-	}
-}
-
 // Close closes pool and releases all resources.
 func (p *Pool[T]) Close(ctx context.Context) error {
 	p.lock.Lock()
@@ -242,8 +214,15 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 		return nil
 	}
 
-	if err := p.releaseResources(ctx); err != nil {
-		return err
+	for {
+		resource, ok := p.resources.Pop()
+		if !ok {
+			break
+		}
+
+		if err := p.release(ctx, resource); err != nil {
+			return err
+		}
 	}
 
 	p.active = 0
@@ -252,6 +231,5 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 	p.totalWaitedDuration = 0
 	p.closed = true
 
-	close(p.tokens)
-	return nil
+	return p.tokens.Close()
 }

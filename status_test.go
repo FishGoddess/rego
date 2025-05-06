@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/FishGoddess/rego/pkg/list"
+	"github.com/FishGoddess/rego/pkg/token"
 )
 
 // go test -v -cover -run=^TestPoolStatus$
@@ -23,16 +24,12 @@ func TestPoolStatus(t *testing.T) {
 		waiting:             8,
 		totalWaited:         0,
 		totalWaitedDuration: 0,
-		tokens:              make(chan token, limit),
+		tokens:              token.NewBucket(limit),
 		resources:           list.New[int](),
 	}
 
 	ctx := context.Background()
 	defer pool.Close(ctx)
-
-	for range limit {
-		pool.tokens <- token{}
-	}
 
 	poolStatus := PoolStatus{
 		Limit:               pool.limit,

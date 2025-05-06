@@ -14,12 +14,10 @@ const (
 	separator = "|"
 )
 
-// List is a linked list supporting generics.
 type List[T any] struct {
 	list *stdlist.List
 }
 
-// New creates an empty list supporting generics.
 func New[T any]() *List[T] {
 	list := &List[T]{
 		list: stdlist.New(),
