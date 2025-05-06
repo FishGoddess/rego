@@ -11,10 +11,10 @@
 
 ### 🍭 Features
 
-* Reuse resources by limiting the quantity of resources
+* Reuse resources by using tokens to limit the quantity of resources
 * Error handling callback for different errors
 * Check pool statistics like active and idle quantity of resources
-* Passing context to callbacks
+* Passing context to callbacks and supporting timeout.
 
 _Check [HISTORY.md](./HISTORY.md) and [FUTURE.md](./FUTURE.md) to know about more information._
 

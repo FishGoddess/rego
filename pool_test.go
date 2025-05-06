@@ -239,7 +239,7 @@ func TestPoolExhaust(t *testing.T) {
 		return nil
 	}
 
-	pool := New(uint64(limit), acquire, release, WithFastFailed())
+	pool := New(uint64(limit), acquire, release, WithDisableToken())
 	defer func() {
 		if err := pool.Close(ctx); err != nil {
 			t.Fatal(err)

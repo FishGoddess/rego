@@ -11,13 +11,13 @@ import (
 	"testing"
 )
 
-// go test -v -cover -run=^TestWithFastFailed$
-func TestWithFastFailed(t *testing.T) {
-	conf := &config{fastFailed: false}
-	WithFastFailed()(conf)
+// go test -v -cover -run=^TestWithDisableToken$
+func TestWithDisableToken(t *testing.T) {
+	conf := &config{disableToken: false}
+	WithDisableToken()(conf)
 
-	if !conf.fastFailed {
-		t.Fatalf("conf.fastFailed %+v is wrong", conf.fastFailed)
+	if !conf.disableToken {
+		t.Fatalf("conf.disableToken %+v is wrong", conf.disableToken)
 	}
 }
 

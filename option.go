@@ -15,7 +15,7 @@ var (
 )
 
 type config struct {
-	fastFailed bool
+	disableToken bool
 
 	newPoolExhaustedErrFunc func(ctx context.Context) error
 	newPoolClosedErrFunc    func(ctx context.Context) error
@@ -31,7 +31,7 @@ func newDefaultConfig() *config {
 	}
 
 	conf := &config{
-		fastFailed:              false,
+		disableToken:            false,
 		newPoolExhaustedErrFunc: newPoolExhaustedErr,
 		newPoolClosedErrFunc:    newPoolClosedErr,
 	}
@@ -55,10 +55,10 @@ func (o Option) ApplyTo(conf *config) {
 	o(conf)
 }
 
-// WithFastFailed sets fastFailed to config.
-func WithFastFailed() Option {
+// WithDisableToken sets disableToken to config.
+func WithDisableToken() Option {
 	return func(conf *config) {
-		conf.fastFailed = true
+		conf.disableToken = true
 	}
 }
 

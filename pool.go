@@ -87,11 +87,11 @@ func (p *Pool[T]) Put(ctx context.Context, resource T) error {
 	}
 
 	p.resources.Push(resource)
-	p.releaseToken()
+	p.produceToken()
 	return nil
 }
 
-// acquireToken acquires a token and waits if need.
+// ConsumeToken consumes a token from bucket and waits util context done if there is no token.
 // Record: Add ctx.Done() to select will cause a performance problem...
 // The select will call runtime.selectgo if there are more than one case in it, and runtime.selectgo has two steps which is slow:
 //
@@ -99,8 +99,8 @@ func (p *Pool[T]) Put(ctx context.Context, resource T) error {
 //	sg := acquireSudog()
 //
 // We don't know how to solve it yet, but we think timeout mechanism should be supported even we haven't solved it.
-func (p *Pool[T]) acquireToken(ctx context.Context) (err error) {
-	if p.conf.fastFailed {
+func (p *Pool[T]) consumeToken(ctx context.Context) (err error) {
+	if p.conf.disableToken {
 		return nil
 	}
 
@@ -122,8 +122,8 @@ func (p *Pool[T]) acquireToken(ctx context.Context) (err error) {
 	return p.tokens.ConsumeToken(ctx)
 }
 
-func (p *Pool[T]) releaseToken() {
-	if p.conf.fastFailed {
+func (p *Pool[T]) produceToken() {
+	if p.conf.disableToken {
 		return
 	}
 
@@ -147,7 +147,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return resource, err
 	}
 
-	if err := p.acquireToken(ctx); err != nil {
+	if err := p.consumeToken(ctx); err != nil {
 		p.lock.Unlock()
 
 		return resource, err
@@ -160,7 +160,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	}
 
 	if p.active >= p.limit {
-		p.releaseToken()
+		p.produceToken()
 		p.lock.Unlock()
 
 		err = p.conf.newPoolExhaustedErr(ctx)
@@ -176,7 +176,7 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		if err != nil {
 			p.lock.Lock()
 			p.active--
-			p.releaseToken()
+			p.produceToken()
 			p.lock.Unlock()
 		}
 	}()
