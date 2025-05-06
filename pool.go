@@ -154,6 +154,7 @@ func (p *Pool[T]) tryToTake() (resource T, ok bool) {
 // We recommend you to use a defer for putting a resource safely.
 func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 	p.lock.Lock()
+
 	if p.closed {
 		p.lock.Unlock()
 
