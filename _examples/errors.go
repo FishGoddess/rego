@@ -34,9 +34,9 @@ func newPoolClosedErr(ctx context.Context) error {
 }
 
 func main() {
-	// Create a pool with limit and fast-failed so it will return an error immediately instead of waiting.
+	// Create a pool with limit and disabling token so it will return an error immediately instead of waiting.
 	ctx := context.Background()
-	pool := rego.New(1, acquire, release, rego.WithFastFailed())
+	pool := rego.New(1, acquire, release, rego.WithDisableToken())
 
 	// Take one resource from pool which is ok.
 	resource, err := pool.Take(ctx)
@@ -55,8 +55,8 @@ func main() {
 	resource, err = pool.Take(ctx)
 	fmt.Println(resource, err, err == rego.ErrPoolClosed)
 
-	// Create a pool with limit and fast-failed and new error funcs.
-	pool = rego.New(1, acquire, release, rego.WithFastFailed(), rego.WithPoolExhaustedErr(newPoolExhaustedErr), rego.WithPoolClosedErr(newPoolClosedErr))
+	// Create a pool with limit and disabling token and new error funcs.
+	pool = rego.New(1, acquire, release, rego.WithDisableToken(), rego.WithPoolExhaustedErr(newPoolExhaustedErr), rego.WithPoolClosedErr(newPoolClosedErr))
 
 	// Take one resource from pool which is ok.
 	resource, err = pool.Take(ctx)
