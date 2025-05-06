@@ -8,6 +8,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/FishGoddess/rego/pkg/list"
 )
 
 var _ ReleaseFunc[int] = DefaultReleaseFunc[int]
@@ -34,15 +36,14 @@ type Pool[T any] struct {
 
 	limit   uint64
 	active  uint64
-	idle    uint64
 	waiting uint64
 
 	totalWaited         uint64
 	totalWaitedDuration time.Duration
 
-	resourceCh chan T
-	tokens     chan token
-	closed     bool
+	tokens    chan token
+	resources *list.List[T]
+	closed    bool
 
 	lock sync.RWMutex
 }
@@ -62,13 +63,13 @@ func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], op
 	}
 
 	pool := &Pool[T]{
-		conf:       *conf,
-		limit:      limit,
-		acquire:    acquire,
-		release:    release,
-		resourceCh: make(chan T, limit),
-		tokens:     make(chan token, limit),
-		closed:     false,
+		conf:      *conf,
+		limit:     limit,
+		acquire:   acquire,
+		release:   release,
+		tokens:    make(chan token, limit),
+		resources: list.New[T](),
+		closed:    false,
 	}
 
 	for range limit {
@@ -86,24 +87,16 @@ func (p *Pool[T]) Put(ctx context.Context, resource T) error {
 		return p.release(ctx, resource)
 	}
 
-	select {
-	case p.resourceCh <- resource:
-		return nil
-	default:
+	if p.resources.Len() >= p.limit {
 		return p.release(ctx, resource)
 	}
+
+	p.resources.Push(resource)
+	p.releaseToken()
+	return nil
 }
 
-func (p *Pool[T]) tryToTake() (resource T, ok bool) {
-	select {
-	case resource = <-p.resourceCh:
-		return resource, true
-	default:
-		return resource, false
-	}
-}
-
-// waitToTake waits to take an idle resource from pool.
+// acquireToken acquires a token and waits if need.
 // Record: Add ctx.Done() to select will cause a performance problem...
 // The select will call runtime.selectgo if there are more than one case in it, and runtime.selectgo has two steps which is slow:
 //
@@ -111,13 +104,49 @@ func (p *Pool[T]) tryToTake() (resource T, ok bool) {
 //	sg := acquireSudog()
 //
 // We don't know how to solve it yet, but we think timeout mechanism should be supported even we haven't solved it.
-func (p *Pool[T]) waitToTake(ctx context.Context) (resource T, err error) {
-	select {
-	case resource = <-p.resourceCh:
-		return resource, nil
-	case <-ctx.Done():
-		return resource, ctx.Err()
+func (p *Pool[T]) acquireToken(ctx context.Context) (err error) {
+	if p.conf.fastFailed {
+		return nil
 	}
+
+	p.waiting++
+	p.lock.Unlock()
+
+	startTime := time.Now()
+
+	defer func() {
+		p.lock.Lock()
+		p.waiting--
+
+		if err == nil {
+			p.totalWaited++
+			p.totalWaitedDuration += time.Since(startTime)
+		}
+	}()
+
+	select {
+	case <-p.tokens:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *Pool[T]) releaseToken() {
+	if p.conf.fastFailed {
+		return
+	}
+
+	select {
+	case p.tokens <- token{}:
+		return
+	default:
+		return
+	}
+}
+
+func (p *Pool[T]) tryToTake() (resource T, ok bool) {
+	return p.resources.Pop()
 }
 
 // Take takes a resource from pool and returns an error if failed.
@@ -132,53 +161,41 @@ func (p *Pool[T]) Take(ctx context.Context) (resource T, err error) {
 		return resource, err
 	}
 
-	var ok bool
-	if resource, ok = p.tryToTake(); ok {
+	if err := p.acquireToken(ctx); err != nil {
+		p.lock.Unlock()
+
+		return resource, err
+	}
+
+	if resource, ok := p.tryToTake(); ok {
 		p.lock.Unlock()
 
 		return resource, nil
 	}
 
-	if p.active < p.limit {
-		// Increase the active and unlock here may cause the pool becomes exhausted in advance.
-		// However, we think this is acceptable in most situations.
-		p.active++
-		p.lock.Unlock()
-
-		defer func() {
-			if err != nil {
-				p.lock.Lock()
-				p.active--
-				p.lock.Unlock()
-			}
-		}()
-
-		return p.acquire(ctx)
-	}
-
-	if p.conf.fastFailed {
+	if p.active >= p.limit {
+		p.releaseToken()
 		p.lock.Unlock()
 
 		err = p.conf.newPoolExhaustedErr(ctx)
 		return resource, err
 	}
 
-	startTime := time.Now()
-
-	p.waiting++
+	// Increase the active and unlock here may cause the pool becomes exhausted in advance.
+	// However, we think this is acceptable in most situations.
+	p.active++
 	p.lock.Unlock()
 
 	defer func() {
-		waitDuration := time.Since(startTime)
-
-		p.lock.Lock()
-		p.waiting--
-		p.totalWaited++
-		p.totalWaitedDuration += waitDuration
-		p.lock.Unlock()
+		if err != nil {
+			p.lock.Lock()
+			p.active--
+			p.releaseToken()
+			p.lock.Unlock()
+		}
 	}()
 
-	return p.waitToTake(ctx)
+	return p.acquire(ctx)
 }
 
 // Status returns the statistics of the pool.
@@ -194,7 +211,7 @@ func (p *Pool[T]) Status() PoolStatus {
 	status := PoolStatus{
 		Limit:               p.limit,
 		Active:              p.active,
-		Idle:                uint64(len(p.resourceCh)),
+		Idle:                p.resources.Len(),
 		Waiting:             p.waiting,
 		AverageWaitDuration: averageWaitDuration,
 	}
@@ -204,13 +221,13 @@ func (p *Pool[T]) Status() PoolStatus {
 
 func (p *Pool[T]) releaseResources(ctx context.Context) error {
 	for {
-		select {
-		case resource := <-p.resourceCh:
-			if err := p.release(ctx, resource); err != nil {
-				return err
-			}
-		default:
+		resource, ok := p.resources.Pop()
+		if !ok {
 			return nil
+		}
+
+		if err := p.release(ctx, resource); err != nil {
+			return err
 		}
 	}
 }
@@ -234,6 +251,6 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 	p.totalWaitedDuration = 0
 	p.closed = true
 
-	close(p.resourceCh)
+	close(p.tokens)
 	return nil
 }

@@ -58,12 +58,12 @@ func TestPool(t *testing.T) {
 			t.Logf("%+v", status)
 
 			if status.Active > pool.limit {
-				t.Errorf("status.Active %d is wrong", status.Active)
+				t.Errorf("status.Active %d > pool.limit %d", status.Active, pool.limit)
 				return
 			}
 
 			if status.Idle > pool.limit {
-				t.Errorf("status.Idle %d is wrong", status.Idle)
+				t.Errorf("status.Idle %d > pool.limit %d", status.Idle, pool.limit)
 				return
 			}
 
@@ -71,7 +71,8 @@ func TestPool(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < 1024; i++ {
+	var totalWaited1 = 1024
+	for i := 0; i < totalWaited1; i++ {
 		resource, err := pool.Take(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -89,24 +90,24 @@ func TestPool(t *testing.T) {
 			t.Fatalf("status.Idle %d is wrong", status.Idle)
 		}
 
-		if status.AverageWaitDuration != 0 {
-			t.Fatalf("status.AverageWaitDuration %d is wrong", status.AverageWaitDuration)
+		if status.AverageWaitDuration <= 0 {
+			t.Fatal("status.AverageWaitDuration is wrong")
 		}
 	}
 
 	t.Logf("%+v", pool.Status())
 
-	if pool.totalWaited != 0 {
-		t.Fatalf("pool.totalWaited %d is wrong", pool.totalWaited)
+	if pool.totalWaited <= 0 {
+		t.Fatal("pool.totalWaited is wrong")
 	}
 
-	if pool.totalWaitedDuration != 0 {
-		t.Fatalf("pool.totalWaitedDuration %d is wrong", pool.totalWaitedDuration)
+	if pool.totalWaitedDuration <= 0 {
+		t.Fatal("pool.totalWaitedDuration is wrong")
 	}
 
-	var totalWaited = 65536
+	var totalWaited2 = 65536
 	var wg sync.WaitGroup
-	for i := 0; i < totalWaited; i++ {
+	for i := 0; i < totalWaited2; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -122,12 +123,12 @@ func TestPool(t *testing.T) {
 
 			status := pool.Status()
 			if status.Active > pool.limit {
-				t.Errorf("status.Active %d is wrong", status.Active)
+				t.Errorf("status.Active %d > pool.limit %d", status.Active, pool.limit)
 				return
 			}
 
 			if status.Idle > pool.limit {
-				t.Errorf("status.Idle %d is wrong", status.Idle)
+				t.Errorf("status.Idle %d > pool.limit %d", status.Idle, pool.limit)
 				return
 			}
 
@@ -141,8 +142,9 @@ func TestPool(t *testing.T) {
 	wg.Wait()
 	t.Logf("%+v", pool.Status())
 
-	if pool.totalWaited > uint64(totalWaited) {
-		t.Fatalf("pool.totalWaited %d is wrong", pool.totalWaited)
+	totalWaited := uint64(totalWaited1 + totalWaited2)
+	if pool.totalWaited > totalWaited {
+		t.Fatalf("pool.totalWaited %d > totalWaited %d", pool.totalWaited, totalWaited)
 	}
 
 	if pool.totalWaited > 0 && pool.totalWaitedDuration <= 0 {
