@@ -230,6 +230,6 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 	p.totalWaited = 0
 	p.totalWaitedDuration = 0
 	p.closed = true
-
-	return p.tokens.Close()
+	p.tokens.Free()
+	return nil
 }

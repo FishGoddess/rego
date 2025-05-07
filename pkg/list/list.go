@@ -63,6 +63,7 @@ func (l *List[T]) freeElement(elem *Element[T]) T {
 	return value
 }
 
+// Push pushes a value to the tail of list.
 func (l *List[T]) Push(value T) {
 	elem := l.newElement(value)
 
@@ -77,6 +78,7 @@ func (l *List[T]) Push(value T) {
 	l.len++
 }
 
+// Pop pops a value from the head of list.
 func (l *List[T]) Pop() (value T, ok bool) {
 	if l.len == 0 {
 		return value, false
@@ -100,6 +102,7 @@ func (l *List[T]) Pop() (value T, ok bool) {
 	return value, true
 }
 
+// Remove removes values that shouldRemove returns true.
 func (l *List[T]) Remove(shouldRemove func(value T) bool) []T {
 	var removedValues []T
 
@@ -135,10 +138,12 @@ func (l *List[T]) Remove(shouldRemove func(value T) bool) []T {
 	return removedValues
 }
 
+// Len returns the length of list.
 func (l *List[T]) Len() uint64 {
 	return l.len
 }
 
+// String stringifies a list with specific format.
 func (l *List[T]) String() string {
 	var builder strings.Builder
 
