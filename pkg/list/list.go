@@ -83,16 +83,18 @@ func (l *List[T]) Pop() (value T, ok bool) {
 	}
 
 	elem := l.head
-	l.head = l.head.next
-	l.len--
 
-	if l.head != nil {
+	// Just need setting head and tail to nil if there is only one element in list.
+	// This 'if else' is more readable than not distinguishing length.
+	if l.len == 1 {
+		l.head = nil
+		l.tail = nil
+	} else {
+		l.head = l.head.next
 		l.head.prev = nil
 	}
 
-	if l.tail == elem {
-		l.tail = nil
-	}
+	l.len--
 
 	value = l.freeElement(elem)
 	return value, true
@@ -107,6 +109,14 @@ func (l *List[T]) Remove(shouldRemove func(value T) bool) []T {
 		elem = elem.next
 
 		if shouldRemove(current.value) {
+			if current == l.head {
+				l.head = current.next
+			}
+
+			if current == l.tail {
+				l.tail = current.prev
+			}
+
 			if current.prev != nil {
 				current.prev.next = current.next
 			}
@@ -116,6 +126,7 @@ func (l *List[T]) Remove(shouldRemove func(value T) bool) []T {
 			}
 
 			l.len--
+
 			value := l.freeElement(current)
 			removedValues = append(removedValues, value)
 		}
