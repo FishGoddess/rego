@@ -81,7 +81,7 @@ goos: linux
 goarch: amd64
 cpu: AMD EPYC 7K62 48-Core Processor
 
-BenchmarkPool-2          3024594               378.2 ns/op            48 B/op          1 allocs/op
+BenchmarkPool-2          4038403               306.0 ns/op             0 B/op          0 allocs/op
 ```
 
 > Benchmarks: _examples/performance_test.go

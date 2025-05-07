@@ -5,59 +5,118 @@
 package list
 
 import (
-	stdlist "container/list"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 const (
 	separator = "|"
 )
 
+type Element[T any] struct {
+	value      T
+	prev, next *Element[T]
+}
+
 type List[T any] struct {
-	list *stdlist.List
+	head *Element[T]
+	tail *Element[T]
+	len  uint64
+
+	elementPool *sync.Pool
 }
 
 func New[T any]() *List[T] {
+	elementPool := &sync.Pool{
+		New: func() any {
+			return new(Element[T])
+		},
+	}
+
 	list := &List[T]{
-		list: stdlist.New(),
+		head:        nil,
+		tail:        nil,
+		len:         0,
+		elementPool: elementPool,
 	}
 
 	return list
 }
 
-// Push pushes a value to list.
-func (l *List[T]) Push(value T) {
-	l.list.PushBack(value)
+func (l *List[T]) newElement(value T) *Element[T] {
+	elem := l.elementPool.Get().(*Element[T])
+	elem.value = value
+
+	return elem
 }
 
-// Pop pops a value from list.
+func (l *List[T]) freeElement(elem *Element[T]) T {
+	value := elem.value
+
+	var zeroValue T
+	elem.value = zeroValue
+	elem.prev = nil
+	elem.next = nil
+
+	l.elementPool.Put(elem)
+	return value
+}
+
+func (l *List[T]) Push(value T) {
+	elem := l.newElement(value)
+
+	if l.len == 0 {
+		l.head = elem
+	} else {
+		elem.prev = l.tail
+		l.tail.next = elem
+	}
+
+	l.tail = elem
+	l.len++
+}
+
 func (l *List[T]) Pop() (value T, ok bool) {
-	front := l.list.Front()
-	if front == nil {
+	if l.len == 0 {
 		return value, false
 	}
 
-	value, ok = l.list.Remove(front).(T)
-	return value, ok
+	elem := l.head
+	l.head = l.head.next
+	l.len--
+
+	if l.head != nil {
+		l.head.prev = nil
+	}
+
+	if l.tail == elem {
+		l.tail = nil
+	}
+
+	value = l.freeElement(elem)
+	return value, true
 }
 
-// String stringifies a list with specified format.
 func (l *List[T]) Remove(shouldRemove func(value T) bool) []T {
 	var removedValues []T
 
-	elem := l.list.Front()
+	elem := l.head
 	for elem != nil {
 		current := elem
-		elem = elem.Next()
+		elem = elem.next
 
-		value, ok := current.Value.(T)
-		if !ok {
-			continue
-		}
+		if shouldRemove(current.value) {
+			if current.prev != nil {
+				current.prev.next = current.next
+			}
 
-		if shouldRemove(value) {
-			l.list.Remove(current)
+			if current.next != nil {
+				current.next.prev = current.prev
+			}
+
+			l.len--
+			value := l.freeElement(current)
 			removedValues = append(removedValues, value)
 		}
 	}
@@ -65,21 +124,17 @@ func (l *List[T]) Remove(shouldRemove func(value T) bool) []T {
 	return removedValues
 }
 
-// Len returns the length of list.
 func (l *List[T]) Len() uint64 {
-	return uint64(l.list.Len())
+	return l.len
 }
 
-// String stringifies a list with specified format.
 func (l *List[T]) String() string {
 	var builder strings.Builder
 
-	elem := l.list.Front()
+	elem := l.head
 	for elem != nil {
-		current := elem
-		elem = elem.Next()
-
-		fmt.Fprintf(&builder, "%v%s", current.Value, separator)
+		fmt.Fprintf(&builder, "%v%s", elem.value, separator)
+		elem = elem.next
 	}
 
 	str := builder.String()

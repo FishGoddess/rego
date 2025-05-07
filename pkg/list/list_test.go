@@ -5,7 +5,6 @@
 package list
 
 import (
-	stdlist "container/list"
 	"slices"
 	"strconv"
 	"strings"
@@ -71,6 +70,25 @@ func TestList(t *testing.T) {
 	if list.Len() != 0 {
 		t.Fatalf("list.Len() %d is wrong", list.Len())
 	}
+
+	length = uint64(len(values))
+
+	strs = make([]string, 0, len(values))
+	for _, value := range values {
+		list.Push(value)
+		strs = append(strs, strconv.Itoa(value))
+	}
+
+	gotString = list.String()
+	wantString = strings.Join(strs, separator)
+
+	if gotString != wantString {
+		t.Fatalf("got string %s != want string %s", gotString, wantString)
+	}
+
+	if list.Len() != length {
+		t.Fatalf("list.Len() %d != length %d", list.Len(), length)
+	}
 }
 
 // go test -v -cover -run=^TestListRemove$
@@ -104,13 +122,22 @@ func TestListRemove(t *testing.T) {
 	if !slices.Equal(removedValues, wantValues) {
 		t.Fatalf("removedValues %v != wantValues %v", removedValues, wantValues)
 	}
+
+	gotString = list.String()
+	wantString = "1|3|5"
+
+	if gotString != wantString {
+		t.Fatalf("got string %s != want string %s", gotString, wantString)
+	}
+
+	if list.Len() != 3 {
+		t.Fatalf("list.Len() %d is wrong", list.Len())
+	}
 }
 
 // go test -v -cover -run=^TestListString$
 func TestListString(t *testing.T) {
-	list := &List[int]{
-		list: stdlist.New(),
-	}
+	list := New[int]()
 
 	gotString := list.String()
 	wantString := ""
@@ -123,9 +150,9 @@ func TestListString(t *testing.T) {
 		t.Fatalf("list.Len() %d is wrong", list.Len())
 	}
 
-	list.list.PushBack(1)
-	list.list.PushBack(2)
-	list.list.PushBack(3)
+	list.Push(1)
+	list.Push(2)
+	list.Push(3)
 
 	gotString = list.String()
 	wantString = "1|2|3"
