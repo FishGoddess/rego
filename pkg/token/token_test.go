@@ -13,15 +13,10 @@ import (
 // go test -v -cover -run=^TestBucket$
 func TestBucket(t *testing.T) {
 	ctx := context.Background()
-
 	limit := 16
-	bucket := NewBucket(uint64(limit))
 
-	defer func() {
-		if err := bucket.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	bucket := NewBucket(uint64(limit))
+	defer bucket.Free()
 
 	if len(bucket.tokens) != limit {
 		t.Fatalf("len(bucket.tokens) %d != limit %d", len(bucket.tokens), limit)

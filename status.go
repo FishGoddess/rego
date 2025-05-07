@@ -20,6 +20,6 @@ type PoolStatus struct {
 	// Waiting is the quantity of waiting for a resource.
 	Waiting uint64 `json:"waiting"`
 
-	// AverageWaitDuration is the average wait duration for new resources.
+	// AverageWaitDuration is the average wait duration waiting for a resource.
 	AverageWaitDuration time.Duration `json:"average_wait_duration"`
 }

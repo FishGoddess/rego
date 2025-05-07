@@ -44,8 +44,7 @@ func (b *Bucket) ProduceToken() {
 	}
 }
 
-// Close closes the bucket.
-func (b *Bucket) Close() error {
+// Free frees all tokens in the bucket.
+func (b *Bucket) Free() {
 	close(b.tokens)
-	return nil
 }

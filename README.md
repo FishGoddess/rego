@@ -70,6 +70,22 @@ func main() {
 }
 ```
 
+### 🚄 性能测试
+
+```shell
+$ make bench
+```
+
+```shell
+goos: linux
+goarch: amd64
+cpu: AMD EPYC 7K62 48-Core Processor
+
+BenchmarkPool-2          4038403               306.0 ns/op             0 B/op          0 allocs/op
+```
+
+> 测试文件：_examples/performance_test.go
+
 ### 👥 贡献者
 
 如果您觉得 rego 缺少您需要的功能，请不要犹豫，马上参与进来，发起一个 _**issue**_。
