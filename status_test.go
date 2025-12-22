@@ -5,49 +5,37 @@
 package rego
 
 import (
-	"context"
 	"testing"
 	"time"
-
-	"github.com/FishGoddess/rego/pkg/list"
-	"github.com/FishGoddess/rego/pkg/token"
 )
 
 // go test -v -cover -run=^TestPoolStatus$
 func TestPoolStatus(t *testing.T) {
-	limit := uint64(16)
+	limit := 16
 
 	pool := &Pool[int]{
-		limit:               limit,
-		release:             DefaultReleaseFunc[int],
-		active:              4,
-		waiting:             8,
-		totalWaited:         0,
-		totalWaitedDuration: 0,
-		tokens:              token.NewBucket(limit),
-		resources:           list.New[int](),
+		limit:          16,
+		active:         12,
+		waiting:        100,
+		waited:         50,
+		waitedDuration: 100 * time.Millisecond,
+		resources:      make(chan int, limit),
 	}
 
-	ctx := context.Background()
-	defer pool.Close(ctx)
-
-	poolStatus := PoolStatus{
-		Limit:               pool.limit,
-		Active:              pool.active,
-		Idle:                pool.resources.Len(),
-		Waiting:             pool.waiting,
-		AverageWaitDuration: 0,
+	for i := range 10 {
+		pool.resources <- i
 	}
 
-	if pool.Status() != poolStatus {
-		t.Fatalf("pool.Status %+v != %+v", pool.Status(), poolStatus)
+	want := PoolStatus{
+		Limit:        16,
+		Using:        2,
+		Idle:         10,
+		Waiting:      100,
+		WaitDuration: 2 * time.Millisecond,
 	}
 
-	pool.totalWaited = 2
-	pool.totalWaitedDuration = time.Second
-	poolStatus.AverageWaitDuration = pool.totalWaitedDuration / time.Duration(pool.totalWaited)
-
-	if pool.Status() != poolStatus {
-		t.Fatalf("pool.Status %+v != %+v", pool.Status(), poolStatus)
+	got := pool.Status()
+	if got != want {
+		t.Fatalf("got %+v != want %+v", got, want)
 	}
 }

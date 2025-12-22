@@ -11,10 +11,10 @@
 
 ### 🍭 Features
 
-* Reuse resources by using tokens to limit the quantity of resources
+* Reuse resources by limiting the quantity of resources
 * Error handling callback for different errors
 * Check pool statistics like active and idle quantity of resources
-* Passing context to callbacks and supporting timeout.
+* Passing context to callbacks
 
 _Check [HISTORY.md](./HISTORY.md) and [FUTURE.md](./FUTURE.md) to know about more information._
 
@@ -69,22 +69,6 @@ func main() {
 	fmt.Println(conn.RemoteAddr())
 }
 ```
-
-### 🚄 Benchmarks
-
-```shell
-$ make bench
-```
-
-```shell
-goos: linux
-goarch: amd64
-cpu: AMD EPYC 7K62 48-Core Processor
-
-BenchmarkPool-2          4038403               306.0 ns/op             0 B/op          0 allocs/op
-```
-
-> Benchmarks: _examples/performance_test.go
 
 ### 👥 Contributing
 

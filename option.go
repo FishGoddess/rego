@@ -15,13 +15,11 @@ var (
 )
 
 type config struct {
-	disableToken bool
-
-	newPoolExhaustedErrFunc func(ctx context.Context) error
-	newPoolClosedErrFunc    func(ctx context.Context) error
+	newPoolExhaustedErr func(ctx context.Context) error
+	newPoolClosedErr    func(ctx context.Context) error
 }
 
-func newDefaultConfig() *config {
+func newConfig() *config {
 	newPoolExhaustedErr := func(_ context.Context) error {
 		return ErrPoolExhausted
 	}
@@ -31,51 +29,37 @@ func newDefaultConfig() *config {
 	}
 
 	conf := &config{
-		disableToken:            false,
-		newPoolExhaustedErrFunc: newPoolExhaustedErr,
-		newPoolClosedErrFunc:    newPoolClosedErr,
+		newPoolExhaustedErr: newPoolExhaustedErr,
+		newPoolClosedErr:    newPoolClosedErr,
 	}
 
 	return conf
 }
 
-func (c *config) newPoolExhaustedErr(ctx context.Context) error {
-	newPoolExhaustedErr := c.newPoolExhaustedErrFunc
-	return newPoolExhaustedErr(ctx)
-}
+func (c *config) apply(opts ...Option) *config {
+	for _, opt := range opts {
+		opt(c)
+	}
 
-func (c *config) newPoolClosedErr(ctx context.Context) error {
-	newPoolClosedErr := c.newPoolClosedErrFunc
-	return newPoolClosedErr(ctx)
+	return c
 }
 
 type Option func(conf *config)
 
-func (o Option) ApplyTo(conf *config) {
-	o(conf)
-}
-
-// WithDisableToken sets disableToken to config.
-func WithDisableToken() Option {
+// WithPoolExhaustedErr sets a function returns an error of exhausted pool to config.
+func WithPoolExhaustedErr(newErr func(ctx context.Context) error) Option {
 	return func(conf *config) {
-		conf.disableToken = true
-	}
-}
-
-// WithPoolExhaustedErr sets newPoolExhaustedErr to config.
-func WithPoolExhaustedErr(newPoolExhaustedErr func(ctx context.Context) error) Option {
-	return func(conf *config) {
-		if newPoolExhaustedErr != nil {
-			conf.newPoolExhaustedErrFunc = newPoolExhaustedErr
+		if newErr != nil {
+			conf.newPoolExhaustedErr = newErr
 		}
 	}
 }
 
-// WithPoolClosedErr sets newPoolClosedErr to config.
-func WithPoolClosedErr(newPoolClosedErr func(ctx context.Context) error) Option {
+// WithPoolClosedErr sets a function returns an error of closed pool to config.
+func WithPoolClosedErr(newErr func(ctx context.Context) error) Option {
 	return func(conf *config) {
-		if newPoolClosedErr != nil {
-			conf.newPoolClosedErrFunc = newPoolClosedErr
+		if newErr != nil {
+			conf.newPoolClosedErr = newErr
 		}
 	}
 }
