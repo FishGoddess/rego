@@ -68,6 +68,22 @@ func main() {
 }
 ```
 
+### 🚄 性能测试
+
+```shell
+$ make bench
+```
+
+```shell
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU E5-26xx v4
+
+BenchmarkPool-2          3096416               419.9 ns/op             8 B/op          1 allocs/op
+```
+
+> 测试文件：_examples/pool_test.go
+
 ### 👥 Contributing
 
 If you find that something is not working as expected please open an _**issue**_.

@@ -68,6 +68,22 @@ func main() {
 }
 ```
 
+### 🚄 性能测试
+
+```shell
+$ make bench
+```
+
+```shell
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU E5-26xx v4
+
+BenchmarkPool-2          3096416               419.9 ns/op             8 B/op          1 allocs/op
+```
+
+> 测试文件：_examples/pool_test.go
+
 ### 👥 贡献者
 
 如果您觉得 rego 缺少您需要的功能，请不要犹豫，马上参与进来，发起一个 _**issue**_。
