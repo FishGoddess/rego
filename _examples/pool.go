@@ -40,24 +40,20 @@ func acquireClient(ctx context.Context) (*http.Client, error) {
 	return &http.Client{}, nil
 }
 
-// releaseClient releases the given client, and returns an error if failed.
+// releaseClient releases the client, and returns an error if failed.
 func releaseClient(ctx context.Context, client *http.Client) error {
 	fmt.Println("release client...")
 	return nil
 }
 
 func main() {
-	// Prepare some backend resources.
+	// Run a server for test.
 	ctx := context.Background()
 
 	go runServer()
 	time.Sleep(time.Second)
 
-	// Create a resource pool which type is *http.Client.
-	// You should prepare two functions: acquire and release.
-	// The acquire function is for acquiring a new resource, and you can do some setups for your resource.
-	// The release function is for releasing the given resource, and you can destroy everything of your resource.
-	// Also, you can specify some options to change the default settings.
+	// Create a pool which type is *http.Client.
 	pool := rego.New(4, acquireClient, releaseClient)
 	defer pool.Close(ctx)
 
@@ -67,17 +63,14 @@ func main() {
 		go func(ii int) {
 			defer wg.Done()
 
-			// Take a client from the pool.
-			// The pool will maintain the count of clients.
-			client, err := pool.Take(ctx)
+			// Acquire a client from the pool.
+			client, err := pool.Acquire(ctx)
 			if err != nil {
 				panic(err)
 			}
 
-			// Remember put the client to pool when your using is done.
-			// This is why we call the resource in pool is reusable.
-			// We recommend you to do this job in a defer function.
-			defer pool.Put(ctx, client)
+			// Remember releasing the client after using.
+			defer pool.Release(ctx, client)
 
 			// Use the client whatever you want.
 			body := strings.NewReader(strconv.Itoa(ii))

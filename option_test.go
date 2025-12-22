@@ -10,30 +10,6 @@ import (
 	"testing"
 )
 
-// go test -v -cover -run=^TestWithPoolExhaustedErr$
-func TestWithPoolExhaustedErr(t *testing.T) {
-	newErr := func(ctx context.Context) error {
-		return nil
-	}
-
-	conf := &config{newPoolExhaustedErr: nil}
-	WithPoolExhaustedErr(newErr)(conf)
-
-	got := fmt.Sprintf("%p", conf.newPoolExhaustedErr)
-	want := fmt.Sprintf("%p", newErr)
-	if got != want {
-		t.Fatalf("got %s != want %s", got, want)
-	}
-
-	WithPoolExhaustedErr(nil)(conf)
-
-	got = fmt.Sprintf("%p", conf.newPoolExhaustedErr)
-	want = fmt.Sprintf("%p", newErr)
-	if got != want {
-		t.Fatalf("got %s != want %s", got, want)
-	}
-}
-
 // go test -v -cover -run=^TestWithPoolClosedErr$
 func TestWithPoolClosedErr(t *testing.T) {
 	newErr := func(ctx context.Context) error {
