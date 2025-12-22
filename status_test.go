@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// go test -v -cover -run=^TestPoolStatus$
-func TestPoolStatus(t *testing.T) {
+// go test -v -cover -run=^TestStatus$
+func TestStatus(t *testing.T) {
 	limit := 16
 
 	pool := &Pool[int]{
@@ -19,14 +19,14 @@ func TestPoolStatus(t *testing.T) {
 		waiting:        100,
 		waited:         50,
 		waitedDuration: 100 * time.Millisecond,
-		resources:      make(chan int, limit),
+		resources:      make(chan *resource[int], limit),
 	}
 
 	for i := range 10 {
-		pool.resources <- i
+		pool.resources <- &resource[int]{value: i}
 	}
 
-	want := PoolStatus{
+	want := Status{
 		Limit:        16,
 		Using:        2,
 		Idle:         10,

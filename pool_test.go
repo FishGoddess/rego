@@ -6,6 +6,7 @@ package rego
 
 import (
 	"context"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,20 +20,28 @@ func TestPool(t *testing.T) {
 	limit := int64(64)
 	acquireLimit := int64(0)
 	releaseLimit := int64(0)
+	values := make(map[int]struct{}, 1024)
 
 	acquire := func(acquireCtx context.Context) (int, error) {
 		if acquireCtx != ctx {
-			t.Fatal("acquireCtx != ctx", acquireCtx, ctx)
+			t.Fatalf("acquireCtx %p != ctx %p", acquireCtx, ctx)
 		}
 
 		atomic.AddInt64(&acquireLimit, 1)
 		atomic.AddInt64(&releaseLimit, 1)
-		return 0, nil
+
+		value := rand.Int()
+		values[value] = struct{}{}
+		return value, nil
 	}
 
-	release := func(releaseCtx context.Context, resource int) error {
+	release := func(releaseCtx context.Context, value int) error {
 		if releaseCtx != ctx {
-			t.Fatal("releaseCtx != ctx", releaseCtx, ctx)
+			t.Fatalf("releaseCtx %p != ctx %p", releaseCtx, ctx)
+		}
+
+		if _, ok := values[value]; !ok {
+			t.Fatalf("value %d not found", value)
 		}
 
 		atomic.AddInt64(&releaseLimit, -1)
@@ -57,13 +66,14 @@ func TestPool(t *testing.T) {
 			status := pool.Status()
 			t.Logf("%+v", status)
 
-			if status.Active > pool.limit {
-				t.Errorf("status.Active %d is wrong", status.Active)
+			active := status.Using + status.Idle
+			if active > pool.limit {
+				t.Errorf("active %d > limit %d", active, pool.limit)
 				return
 			}
 
 			if status.Idle > pool.limit {
-				t.Errorf("status.Idle %d is wrong", status.Idle)
+				t.Errorf("idle %d > limit %d", status.Idle, pool.limit)
 				return
 			}
 
@@ -72,67 +82,75 @@ func TestPool(t *testing.T) {
 	}()
 
 	for i := 0; i < 1024; i++ {
-		resource, err := pool.Take(ctx)
+		value, err := pool.Acquire(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		time.Sleep(5 * time.Millisecond)
-		pool.Put(ctx, resource)
-
 		status := pool.Status()
-		if status.Active != 1 {
-			t.Fatalf("status.Active %d is wrong", status.Active)
+		if status.Using != 1 {
+			t.Fatalf("using %d is wrong", status.Using)
 		}
 
+		time.Sleep(5 * time.Millisecond)
+		pool.Release(ctx, value)
+
+		status = pool.Status()
 		if status.Idle != 1 {
-			t.Fatalf("status.Idle %d is wrong", status.Idle)
+			t.Fatalf("idle %d is wrong", status.Idle)
 		}
 
-		if status.AverageWaitDuration != 0 {
-			t.Fatalf("status.AverageWaitDuration %d is wrong", status.AverageWaitDuration)
+		if status.WaitDuration != 0 {
+			t.Fatalf("status.WaitDuration %d is wrong", status.WaitDuration)
 		}
 	}
 
 	t.Logf("%+v", pool.Status())
 
-	if pool.totalWaited != 0 {
-		t.Fatalf("pool.totalWaited %d is wrong", pool.totalWaited)
+	if pool.waited != 0 {
+		t.Fatalf("pool.waited %d is wrong", pool.waited)
 	}
 
-	if pool.totalWaitedDuration != 0 {
-		t.Fatalf("pool.totalWaitedDuration %d is wrong", pool.totalWaitedDuration)
+	if pool.waitedDuration != 0 {
+		t.Fatalf("pool.waitedDuration %d is wrong", pool.waitedDuration)
 	}
 
-	var totalWaited = 65536
+	var n = 65536
 	var wg sync.WaitGroup
-	for i := 0; i < totalWaited; i++ {
+
+	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			resource, err := pool.Take(ctx)
+			value, err := pool.Acquire(ctx)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 
-			time.Sleep(5 * time.Millisecond)
-			pool.Put(ctx, resource)
-
 			status := pool.Status()
-			if status.Active > pool.limit {
-				t.Errorf("status.Active %d is wrong", status.Active)
+			if status.Using < 1 {
+				t.Errorf("using %d is wrong", status.Using)
 				return
 			}
 
+			if status.Using > pool.limit {
+				t.Errorf("using %d > limit %d", status.Using, pool.limit)
+				return
+			}
+
+			time.Sleep(5 * time.Millisecond)
+			pool.Release(ctx, value)
+
+			status = pool.Status()
 			if status.Idle > pool.limit {
-				t.Errorf("status.Idle %d is wrong", status.Idle)
+				t.Errorf("idle %d > limit %d", status.Idle, pool.limit)
 				return
 			}
 
-			if status.Waiting > 0 && pool.totalWaited > 0 && status.AverageWaitDuration <= 0 {
-				t.Errorf("status.AverageWaitDuration %d is wrong", status.AverageWaitDuration)
+			if status.Waiting > 0 && pool.waited > 0 && status.WaitDuration <= 0 {
+				t.Errorf("wait duration %d is wrong", status.WaitDuration)
 				return
 			}
 		}()
@@ -141,11 +159,24 @@ func TestPool(t *testing.T) {
 	wg.Wait()
 	t.Logf("%+v", pool.Status())
 
-	if pool.totalWaited > uint64(totalWaited) {
-		t.Fatalf("pool.totalWaited %d is wrong", pool.totalWaited)
+	status := pool.Status()
+	if status.Using != 0 {
+		t.Fatalf("using %d is wrong", status.Using)
 	}
 
-	if pool.totalWaited > 0 && pool.totalWaitedDuration <= 0 {
-		t.Fatalf("pool.totalWaitedDuration %d is wrong", pool.totalWaitedDuration)
+	if status.Idle != pool.limit {
+		t.Fatalf("idle %d != limit %d", status.Idle, pool.limit)
+	}
+
+	if status.Waiting != 0 {
+		t.Fatalf("waiting %d is wrong", status.Waiting)
+	}
+
+	if pool.waited > uint64(n) {
+		t.Fatalf("pool.waited %d > n %d", pool.waited, n)
+	}
+
+	if pool.waited > 0 && pool.waitedDuration <= 0 {
+		t.Fatalf("pool.waited %d > 0 but waitedDuration %d <= 0", pool.waited, pool.waitedDuration)
 	}
 }

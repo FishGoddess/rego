@@ -37,13 +37,15 @@ type Pool[T any] struct {
 	lock sync.RWMutex
 }
 
+// New returns a new pool with limit resources.
+// All new resources are acquired by acquire function and released by release function.
 func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], opts ...Option) *Pool[T] {
 	if limit <= 0 {
 		panic("rego: limit <= 0")
 	}
 
 	if acquire == nil || release == nil {
-		panic("rego: acquire or release function is nil")
+		panic("rego: acquire function or release function is nil")
 	}
 
 	conf := newConfig().apply(opts...)
@@ -79,28 +81,7 @@ func (p *Pool[T]) newResource(value T) *resource[T] {
 	return resource
 }
 
-func (p *Pool[T]) Put(ctx context.Context, value T) error {
-	p.lock.RLock()
-	closed := p.closed
-	p.lock.RUnlock()
-
-	if closed {
-		return p.release(ctx, value)
-	}
-
-	resource := p.newResource(value)
-
-	select {
-	case p.resources <- resource:
-		return nil
-	case <-p.done:
-		return p.release(ctx, value)
-	default:
-		return p.release(ctx, value)
-	}
-}
-
-func (p *Pool[T]) tryToTake() (value T, ok bool) {
+func (p *Pool[T]) acquireIdle() (value T, ok bool) {
 	select {
 	case resource := <-p.resources:
 		return resource.value, true
@@ -111,15 +92,7 @@ func (p *Pool[T]) tryToTake() (value T, ok bool) {
 	}
 }
 
-// waitToTake waits to take an idle resource from pool.
-// Record: Add ctx.Done() to select will cause a performance problem...
-// The select will call runtime.selectgo if there are more than one case in it, and runtime.selectgo has two steps which is slow:
-//
-//	sellock(scases, lockorder)
-//	sg := acquireSudog()
-//
-// We don't know how to solve it yet, but we think timeout mechanism should be supported even we haven't solved it.
-func (p *Pool[T]) waitToTake(ctx context.Context) (value T, err error) {
+func (p *Pool[T]) waitIdle(ctx context.Context) (value T, err error) {
 	select {
 	case resource := <-p.resources:
 		return resource.value, nil
@@ -131,34 +104,29 @@ func (p *Pool[T]) waitToTake(ctx context.Context) (value T, err error) {
 	}
 }
 
-// Take takes a resource from pool and returns an error if failed.
-// You should call pool.Put to put a taken resource back to the pool.
-// We recommend you to use a defer for putting a resource safely.
-func (p *Pool[T]) Take(ctx context.Context) (value T, err error) {
-	p.lock.RLock()
-	closed := p.closed
-	p.lock.RUnlock()
+// Acquire acquires a resource from pool and returns an error if failed.
+// You should call Pool.Release to return the resource back to the pool.
+func (p *Pool[T]) Acquire(ctx context.Context) (value T, err error) {
+	p.lock.Lock()
+	if p.closed {
+		p.lock.Unlock()
 
-	if closed {
 		err = p.conf.newPoolClosedErr(ctx)
 		return value, err
 	}
 
+	// Try to acquire a idle resource from pool.
 	var ok bool
-	if value, ok = p.tryToTake(); ok {
+	if value, ok = p.acquireIdle(); ok {
+		p.lock.Unlock()
+
 		return value, nil
 	}
 
-	p.lock.Lock()
-
-	if p.closed {
-		err = p.conf.newPoolClosedErr(ctx)
-		return value, err
-	}
-
+	// No idle resource, we should acquire a new one or wait a idle one.
+	// Increase the active and unlock here may cause the pool becomes exhausted in advance.
+	// However, we think this is acceptable in most situations.
 	if p.active < p.limit {
-		// Increase the active and unlock here may cause the pool becomes exhausted in advance.
-		// However, we think this is acceptable in most situations.
 		p.active++
 		p.lock.Unlock()
 
@@ -173,11 +141,10 @@ func (p *Pool[T]) Take(ctx context.Context) (value T, err error) {
 		return p.acquire(ctx)
 	}
 
-	startTime := time.Now()
-
 	p.waiting++
 	p.lock.Unlock()
 
+	startTime := time.Now()
 	defer func() {
 		d := time.Since(startTime)
 
@@ -188,7 +155,34 @@ func (p *Pool[T]) Take(ctx context.Context) (value T, err error) {
 		p.lock.Unlock()
 	}()
 
-	return p.waitToTake(ctx)
+	return p.waitIdle(ctx)
+}
+
+// Release releases a resource to pool so we can reuse it next time.
+func (p *Pool[T]) Release(ctx context.Context, value T) error {
+	p.lock.RLock()
+	if p.closed {
+		p.lock.RUnlock()
+
+		return p.release(ctx, value)
+	}
+
+	resource := p.newResource(value)
+
+	select {
+	case p.resources <- resource:
+		p.lock.RUnlock()
+
+		return nil
+	case <-p.done:
+		p.lock.RUnlock()
+
+		return p.release(ctx, value)
+	default:
+		p.lock.RUnlock()
+
+		return p.release(ctx, value)
+	}
 }
 
 // Status returns the statistics of the pool.
@@ -214,7 +208,7 @@ func (p *Pool[T]) Status() Status {
 	return status
 }
 
-func (p *Pool[T]) releaseResources(ctx context.Context) error {
+func (p *Pool[T]) releaseAll(ctx context.Context) error {
 	for {
 		select {
 		case resource := <-p.resources:
@@ -236,7 +230,7 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 		return nil
 	}
 
-	if err := p.releaseResources(ctx); err != nil {
+	if err := p.releaseAll(ctx); err != nil {
 		return err
 	}
 
