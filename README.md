@@ -79,7 +79,7 @@ goos: linux
 goarch: amd64
 cpu: Intel(R) Xeon(R) CPU E5-26xx v4
 
-BenchmarkPool-2          4000069               316.2 ns/op             0 B/op          0 allocs/op
+BenchmarkPool-2          5918169               191.3 ns/op             0 B/op          0 allocs/op
 ```
 
 > 测试文件：_examples/pool_test.go

@@ -19,11 +19,11 @@ func TestStatus(t *testing.T) {
 		waiting:        100,
 		waited:         50,
 		waitedDuration: 100 * time.Millisecond,
-		resources:      make(chan *resource[int], limit),
+		resources:      make(chan int, limit),
 	}
 
 	for i := range 10 {
-		pool.resources <- &resource[int]{value: i}
+		pool.resources <- i
 	}
 
 	want := Status{

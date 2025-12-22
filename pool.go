@@ -11,21 +11,20 @@ import (
 )
 
 // AcquireFunc is a function acquires a new resource and returns error if failed.
-type AcquireFunc[T any] func(ctx context.Context) (T, error)
+type AcquireFunc[Resource any] func(ctx context.Context) (Resource, error)
 
 // ReleaseFunc is a function releases a resource and returns error if failed.
-type ReleaseFunc[T any] func(ctx context.Context, value T) error
+type ReleaseFunc[Resource any] func(ctx context.Context, resource Resource) error
 
 // Pool stores some resources and you can reuse them.
-type Pool[T any] struct {
+type Pool[Resource any] struct {
 	conf config
 
-	acquire AcquireFunc[T]
-	release ReleaseFunc[T]
+	acquire AcquireFunc[Resource]
+	release ReleaseFunc[Resource]
 
-	resourcePool *sync.Pool
-	resources    chan *resource[T]
-	closed       bool
+	resources chan Resource
+	closed    bool
 
 	limit          uint64
 	active         uint64
@@ -37,8 +36,8 @@ type Pool[T any] struct {
 }
 
 // New returns a new pool with limit resources.
-// All new resources are acquired by acquire function and released by release function.
-func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], opts ...Option) *Pool[T] {
+// All resources are acquired by acquire function and released by release function.
+func New[Resource any](limit uint64, acquire AcquireFunc[Resource], release ReleaseFunc[Resource], opts ...Option) *Pool[Resource] {
 	if limit <= 0 {
 		panic("rego: limit <= 0")
 	}
@@ -49,76 +48,57 @@ func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], op
 
 	conf := newConfig().apply(opts...)
 
-	resourcePool := &sync.Pool{
-		New: func() any {
-			return new(resource[T])
-		},
-	}
-
-	pool := &Pool[T]{
-		conf:         *conf,
-		limit:        limit,
-		acquire:      acquire,
-		release:      release,
-		resourcePool: resourcePool,
-		resources:    make(chan *resource[T], limit),
-		closed:       false,
+	pool := &Pool[Resource]{
+		conf:      *conf,
+		limit:     limit,
+		acquire:   acquire,
+		release:   release,
+		resources: make(chan Resource, limit),
+		closed:    false,
 	}
 
 	return pool
 }
 
-func (p *Pool[T]) freeResource(resource *resource[T]) T {
-	value := resource.value
-
-	resource.reset()
-	p.resourcePool.Put(resource)
-	return value
-}
-
-func (p *Pool[T]) newResource(value T) *resource[T] {
-	resource := p.resourcePool.Get().(*resource[T])
-	resource.value = value
-	return resource
-}
-
-func (p *Pool[T]) acquireIdle() (value T, ok bool) {
-	select {
-	case resource := <-p.resources:
-		value = p.freeResource(resource)
-		return value, true
-	default:
-		return value, false
+func (p *Pool[Resource]) acquireIdle() (resource Resource, ok bool) {
+	for {
+		select {
+		case resource := <-p.resources:
+			return resource, true
+		default:
+			return resource, false
+		}
 	}
 }
 
-func (p *Pool[T]) waitIdle(ctx context.Context) (value T, err error) {
-	select {
-	case resource := <-p.resources:
-		value = p.freeResource(resource)
-		return value, nil
-	case <-ctx.Done():
-		return value, ctx.Err()
+func (p *Pool[Resource]) waitIdle(ctx context.Context) (resource Resource, err error) {
+	for {
+		select {
+		case resource := <-p.resources:
+			return resource, nil
+		case <-ctx.Done():
+			err = ctx.Err()
+			return resource, err
+		}
 	}
 }
 
 // Acquire acquires a resource from pool and returns an error if failed.
 // You should call Pool.Release to return the resource back to the pool.
-func (p *Pool[T]) Acquire(ctx context.Context) (value T, err error) {
+func (p *Pool[Resource]) Acquire(ctx context.Context) (resource Resource, err error) {
 	p.lock.Lock()
 	if p.closed {
 		p.lock.Unlock()
 
 		err = p.conf.newPoolClosedErr(ctx)
-		return value, err
+		return resource, err
 	}
 
 	// Try to acquire a idle resource from pool.
 	var ok bool
-	if value, ok = p.acquireIdle(); ok {
+	if resource, ok = p.acquireIdle(); ok {
 		p.lock.Unlock()
-
-		return value, nil
+		return resource, nil
 	}
 
 	// No idle resource, we should acquire a new one or wait a idle one.
@@ -157,30 +137,29 @@ func (p *Pool[T]) Acquire(ctx context.Context) (value T, err error) {
 }
 
 // Release releases a resource to pool so we can reuse it next time.
-func (p *Pool[T]) Release(ctx context.Context, value T) error {
-	p.lock.RLock()
+func (p *Pool[Resource]) Release(ctx context.Context, resource Resource) error {
+	p.lock.Lock()
 	if p.closed {
-		p.lock.RUnlock()
+		p.lock.Unlock()
 
-		return p.release(ctx, value)
+		return p.release(ctx, resource)
 	}
-
-	resource := p.newResource(value)
 
 	select {
 	case p.resources <- resource:
-		p.lock.RUnlock()
+		p.lock.Unlock()
 
 		return nil
 	default:
-		p.lock.RUnlock()
+		p.active--
+		p.lock.Unlock()
 
-		return p.release(ctx, value)
+		return p.release(ctx, resource)
 	}
 }
 
 // Status returns the statistics of the pool.
-func (p *Pool[T]) Status() Status {
+func (p *Pool[Resource]) Status() Status {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -202,11 +181,11 @@ func (p *Pool[T]) Status() Status {
 	return status
 }
 
-func (p *Pool[T]) releaseAll(ctx context.Context) error {
+func (p *Pool[Resource]) releaseAll(ctx context.Context) error {
 	for {
 		select {
 		case resource := <-p.resources:
-			if err := p.release(ctx, resource.value); err != nil {
+			if err := p.release(ctx, resource); err != nil {
 				return err
 			}
 		default:
@@ -216,7 +195,7 @@ func (p *Pool[T]) releaseAll(ctx context.Context) error {
 }
 
 // Close closes pool and releases all resources.
-func (p *Pool[T]) Close(ctx context.Context) error {
+func (p *Pool[Resource]) Close(ctx context.Context) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
