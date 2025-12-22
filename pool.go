@@ -25,7 +25,6 @@ type Pool[T any] struct {
 
 	resourcePool *sync.Pool
 	resources    chan *resource[T]
-	done         chan struct{}
 	closed       bool
 
 	limit          uint64
@@ -63,7 +62,6 @@ func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], op
 		release:      release,
 		resourcePool: resourcePool,
 		resources:    make(chan *resource[T], limit),
-		done:         make(chan struct{}),
 		closed:       false,
 	}
 
@@ -89,8 +87,6 @@ func (p *Pool[T]) acquireIdle() (value T, ok bool) {
 	case resource := <-p.resources:
 		value = p.freeResource(resource)
 		return value, true
-	case <-p.done:
-		return value, false
 	default:
 		return value, false
 	}
@@ -103,9 +99,6 @@ func (p *Pool[T]) waitIdle(ctx context.Context) (value T, err error) {
 		return value, nil
 	case <-ctx.Done():
 		return value, ctx.Err()
-	case <-p.done:
-		err = p.conf.newPoolClosedErr(ctx)
-		return value, err
 	}
 }
 
@@ -179,10 +172,6 @@ func (p *Pool[T]) Release(ctx context.Context, value T) error {
 		p.lock.RUnlock()
 
 		return nil
-	case <-p.done:
-		p.lock.RUnlock()
-
-		return p.release(ctx, value)
 	default:
 		p.lock.RUnlock()
 
@@ -245,6 +234,6 @@ func (p *Pool[T]) Close(ctx context.Context) error {
 	p.waitedDuration = 0
 	p.closed = true
 
-	close(p.done)
+	close(p.resources)
 	return nil
 }
