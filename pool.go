@@ -16,12 +16,16 @@ type AcquireFunc[Resource any] func(ctx context.Context) (Resource, error)
 // ReleaseFunc is a function releases a resource and returns error if failed.
 type ReleaseFunc[Resource any] func(ctx context.Context, resource Resource) error
 
+// AvailableFunc is a function checks if a resource is available.
+type AvailableFunc[Resource any] func(ctx context.Context, resource Resource) bool
+
 // Pool stores some resources and you can reuse them.
 type Pool[Resource any] struct {
 	conf config
 
-	acquire AcquireFunc[Resource]
-	release ReleaseFunc[Resource]
+	acquire   AcquireFunc[Resource]
+	release   ReleaseFunc[Resource]
+	available AvailableFunc[Resource]
 
 	resources chan Resource
 	closed    bool
@@ -60,11 +64,17 @@ func New[Resource any](limit uint64, acquire AcquireFunc[Resource], release Rele
 	return pool
 }
 
-func (p *Pool[Resource]) acquireIdle() (resource Resource, ok bool) {
+func (p *Pool[Resource]) acquireIdle(ctx context.Context) (resource Resource, ok bool) {
 	for {
 		select {
 		case resource := <-p.resources:
-			return resource, true
+			if p.available == nil {
+				return resource, true
+			}
+
+			if p.available(ctx, resource) {
+				return resource, true
+			}
 		default:
 			return resource, false
 		}
@@ -96,7 +106,7 @@ func (p *Pool[Resource]) Acquire(ctx context.Context) (resource Resource, err er
 
 	// Try to acquire a idle resource from pool.
 	var ok bool
-	if resource, ok = p.acquireIdle(); ok {
+	if resource, ok = p.acquireIdle(ctx); ok {
 		p.lock.Unlock()
 		return resource, nil
 	}

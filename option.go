@@ -7,7 +7,6 @@ package rego
 import (
 	"context"
 	"errors"
-	"time"
 )
 
 var (
@@ -15,7 +14,6 @@ var (
 )
 
 type config struct {
-	ttl              time.Duration
 	newPoolClosedErr func(ctx context.Context) error
 }
 
@@ -25,7 +23,6 @@ func newConfig() *config {
 	}
 
 	conf := &config{
-		ttl:              0,
 		newPoolClosedErr: newPoolClosedErr,
 	}
 
@@ -41,15 +38,6 @@ func (c *config) apply(opts ...Option) *config {
 }
 
 type Option func(conf *config)
-
-// WithTTL sets ttl to config.
-func WithTTL(ttl time.Duration) Option {
-	return func(conf *config) {
-		if ttl > 0 {
-			conf.ttl = ttl
-		}
-	}
-}
 
 // WithPoolClosedErr sets a function returns an error of closed pool to config.
 func WithPoolClosedErr(newErr func(ctx context.Context) error) Option {

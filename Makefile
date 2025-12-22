@@ -1,4 +1,4 @@
-.PHONY: fmt test
+.PHONY: fmt test bench
 
 all: fmt test
 
