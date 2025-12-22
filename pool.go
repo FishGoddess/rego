@@ -70,9 +70,12 @@ func New[T any](limit uint64, acquire AcquireFunc[T], release ReleaseFunc[T], op
 	return pool
 }
 
-func (p *Pool[T]) freeResource(resource *resource[T]) {
+func (p *Pool[T]) freeResource(resource *resource[T]) T {
+	value := resource.value
+
 	resource.reset()
 	p.resourcePool.Put(resource)
+	return value
 }
 
 func (p *Pool[T]) newResource(value T) *resource[T] {
@@ -84,7 +87,8 @@ func (p *Pool[T]) newResource(value T) *resource[T] {
 func (p *Pool[T]) acquireIdle() (value T, ok bool) {
 	select {
 	case resource := <-p.resources:
-		return resource.value, true
+		value = p.freeResource(resource)
+		return value, true
 	case <-p.done:
 		return value, false
 	default:
@@ -95,7 +99,8 @@ func (p *Pool[T]) acquireIdle() (value T, ok bool) {
 func (p *Pool[T]) waitIdle(ctx context.Context) (value T, err error) {
 	select {
 	case resource := <-p.resources:
-		return resource.value, nil
+		value = p.freeResource(resource)
+		return value, nil
 	case <-ctx.Done():
 		return value, ctx.Err()
 	case <-p.done:

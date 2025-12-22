@@ -4,7 +4,9 @@
 
 package rego
 
-import "testing"
+import (
+	"testing"
+)
 
 // go test -v -cover -run=^TestResourceReset$
 func TestResourceReset(t *testing.T) {

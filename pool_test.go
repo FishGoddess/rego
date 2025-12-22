@@ -20,7 +20,7 @@ func TestPool(t *testing.T) {
 	limit := int64(64)
 	acquireLimit := int64(0)
 	releaseLimit := int64(0)
-	values := make(map[int]struct{}, 1024)
+	values := sync.Map{}
 
 	acquire := func(acquireCtx context.Context) (int, error) {
 		if acquireCtx != ctx {
@@ -31,7 +31,7 @@ func TestPool(t *testing.T) {
 		atomic.AddInt64(&releaseLimit, 1)
 
 		value := rand.Int()
-		values[value] = struct{}{}
+		values.Store(value, nil)
 		return value, nil
 	}
 
@@ -40,7 +40,7 @@ func TestPool(t *testing.T) {
 			t.Fatalf("releaseCtx %p != ctx %p", releaseCtx, ctx)
 		}
 
-		if _, ok := values[value]; !ok {
+		if _, ok := values.Load(value); !ok {
 			t.Fatalf("value %d not found", value)
 		}
 
