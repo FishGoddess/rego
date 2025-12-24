@@ -6,6 +6,7 @@ package rego
 
 import (
 	"context"
+	"fmt"
 	"math/rand/v2"
 	"sync"
 	"sync/atomic"
@@ -13,8 +14,56 @@ import (
 	"time"
 )
 
-// go test -v -cover -run=^TestPool$
-func TestPool(t *testing.T) {
+// go test -v -cover -run=^TestWithAvailableFunc$
+func TestWithAvailableFunc(t *testing.T) {
+	available := func(context.Context, int) bool {
+		return false
+	}
+
+	pool := &Pool[int]{available: nil}
+	pool.WithAvailableFunc(available)
+
+	got := fmt.Sprintf("%p", pool.available)
+	want := fmt.Sprintf("%p", available)
+	if got != want {
+		t.Fatalf("got %s != want %s", got, want)
+	}
+
+	pool.WithAvailableFunc(nil)
+
+	got = fmt.Sprintf("%p", pool.available)
+	want = fmt.Sprintf("%p", available)
+	if got != want {
+		t.Fatalf("got %s != want %s", got, want)
+	}
+}
+
+// go test -v -cover -run=^TestWithPoolClosedErrFunc$
+func TestWithPoolClosedErrFunc(t *testing.T) {
+	newClosedErr := func(context.Context) error {
+		return nil
+	}
+
+	pool := &Pool[int]{newClosedErr: nil}
+	pool.WithPoolClosedErrFunc(newClosedErr)
+
+	got := fmt.Sprintf("%p", pool.newClosedErr)
+	want := fmt.Sprintf("%p", newClosedErr)
+	if got != want {
+		t.Fatalf("got %s != want %s", got, want)
+	}
+
+	pool.WithPoolClosedErrFunc(nil)
+
+	got = fmt.Sprintf("%p", pool.newClosedErr)
+	want = fmt.Sprintf("%p", newClosedErr)
+	if got != want {
+		t.Fatalf("got %s != want %s", got, want)
+	}
+}
+
+// go test -v -cover -run=^TestPoolAcquireRelease$
+func TestPoolAcquireRelease(t *testing.T) {
 	ctx := context.Background()
 
 	limit := int64(64)
