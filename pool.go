@@ -114,54 +114,73 @@ func (p *Pool[Resource]) waitIdle(ctx context.Context) (resource Resource, err e
 // Acquire acquires a resource from pool and returns an error if failed.
 // You should call Pool.Release to return the resource back to the pool.
 func (p *Pool[Resource]) Acquire(ctx context.Context) (resource Resource, err error) {
-	p.lock.Lock()
-	if p.closed {
-		p.lock.Unlock()
+	for {
+		p.lock.Lock()
+		if p.closed {
+			p.lock.Unlock()
 
-		err = p.newClosedErr(ctx)
-		return resource, err
-	}
+			err = p.newClosedErr(ctx)
+			return resource, err
+		}
 
-	// Try to acquire a idle resource from pool.
-	var ok bool
-	if resource, ok = p.acquireIdle(); ok {
-		p.lock.Unlock()
-		return resource, nil
-	}
+		// Try to acquire a idle resource from pool.
+		var ok bool
+		if resource, ok = p.acquireIdle(); ok {
+			p.lock.Unlock()
 
-	// No idle resource, we should acquire a new one or wait a idle one.
-	// Increase the active and unlock here may cause the pool becomes exhausted in advance.
-	// However, we think this is acceptable in most situations.
-	if p.active < p.limit {
-		p.active++
-		p.lock.Unlock()
+			if p.available(ctx, resource) {
+				return resource, nil
+			}
 
-		defer func() {
+			p.lock.Lock()
+			p.active--
+			p.lock.Unlock()
+			continue
+		}
+
+		// No idle resource, we should acquire a new one or wait a idle one.
+		// Increase the active and unlock here may cause the pool becomes exhausted in advance.
+		// However, we think this is acceptable in most situations.
+		if p.active < p.limit {
+			p.active++
+			p.lock.Unlock()
+
+			resource, err = p.acquire(ctx)
 			if err != nil {
 				p.lock.Lock()
 				p.active--
 				p.lock.Unlock()
 			}
-		}()
 
-		return p.acquire(ctx)
-	}
+			return resource, err
+		}
 
-	p.waiting++
-	p.lock.Unlock()
+		p.waiting++
+		p.lock.Unlock()
 
-	startTime := time.Now()
-	defer func() {
-		d := time.Since(startTime)
+		startTime := time.Now()
+		resource, err = p.waitIdle(ctx)
+		endTime := time.Now()
 
 		p.lock.Lock()
 		p.waiting--
 		p.waited++
-		p.waitedDuration += d
+		p.waitedDuration += endTime.Sub(startTime)
 		p.lock.Unlock()
-	}()
 
-	return p.waitIdle(ctx)
+		if err != nil {
+			return resource, err
+		}
+
+		if p.available(ctx, resource) {
+			return resource, nil
+		}
+
+		p.lock.Lock()
+		p.active--
+		p.lock.Unlock()
+		continue
+	}
 }
 
 // Release releases a resource to pool so we can reuse it next time.
