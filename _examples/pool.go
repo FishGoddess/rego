@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,6 +47,15 @@ func releaseClient(ctx context.Context, client *http.Client) error {
 	return nil
 }
 
+func availableClient(ctx context.Context, client *http.Client) bool {
+	fmt.Println("available client...")
+	return true
+}
+
+func poolClosedErr(ctx context.Context) error {
+	return errors.New("_example: http client pool is closed")
+}
+
 func main() {
 	// Run a server for test.
 	ctx := context.Background()
@@ -54,7 +64,7 @@ func main() {
 	time.Sleep(time.Second)
 
 	// Create a pool which type is *http.Client.
-	pool := rego.New(4, acquireClient, releaseClient)
+	pool := rego.New(4, acquireClient, releaseClient).WithAvailableFunc(availableClient).WithPoolClosedErrFunc(poolClosedErr)
 	defer pool.Close(ctx)
 
 	var wg sync.WaitGroup
@@ -84,4 +94,8 @@ func main() {
 
 	wg.Wait()
 	fmt.Printf("pool status: %+v\n", pool.Status())
+
+	pool.Close(ctx)
+	_, err := pool.Acquire(ctx)
+	fmt.Printf("pool acquire err: %+v\n", err)
 }
