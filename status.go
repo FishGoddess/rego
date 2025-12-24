@@ -6,20 +6,20 @@ package rego
 
 import "time"
 
-// PoolStatus is the statistics of pool.
-type PoolStatus struct {
+// Status includes some statistics of the pool.
+type Status struct {
 	// Limit is the maximum quantity of resources in pool.
 	Limit uint64 `json:"limit"`
 
-	// Active is the quantity of resources in pool including idle and using.
-	Active uint64 `json:"active"`
+	// Using is the quantity of using resources in pool.
+	Using uint64 `json:"using"`
 
 	// Idle is the quantity of idle resources in pool.
 	Idle uint64 `json:"idle"`
 
-	// Waiting is the quantity of waiting for a resource.
+	// Waiting is the quantity of caller waiting for a resource.
 	Waiting uint64 `json:"waiting"`
 
-	// AverageWaitDuration is the average wait duration waiting for a resource.
-	AverageWaitDuration time.Duration `json:"average_wait_duration"`
+	// WaitDuration is the average duration waiting a resource.
+	WaitDuration time.Duration `json:"wait_duration"`
 }

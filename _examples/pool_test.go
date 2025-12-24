@@ -11,7 +11,7 @@ import (
 	"github.com/FishGoddess/rego"
 )
 
-// go test -v -run=^$ -bench=^BenchmarkPool$ -benchtime=1s
+// go test -v -run=none -bench=^BenchmarkPool$ -benchmem -benchtime=1s
 func BenchmarkPool(b *testing.B) {
 	ctx := context.Background()
 
@@ -31,12 +31,12 @@ func BenchmarkPool(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resource, err := pool.Take(ctx)
+			value, err := pool.Acquire(ctx)
 			if err != nil {
 				b.Fatal(err)
 			}
 
-			if err = pool.Put(ctx, resource); err != nil {
+			if err = pool.Release(ctx, value); err != nil {
 				b.Fatal(err)
 			}
 		}
