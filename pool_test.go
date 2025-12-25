@@ -6,6 +6,7 @@ package rego
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"sync"
@@ -13,6 +14,194 @@ import (
 	"testing"
 	"time"
 )
+
+// go test -v -cover -run=^TestNew$
+func TestNew(t *testing.T) {
+	t.Run("limit_panic", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				tt.Fatal("limit not panic")
+			}
+		}()
+
+		acquire := func(context.Context) (int, error) { return 0, nil }
+		release := func(context.Context, int) error { return nil }
+		New(0, acquire, release)
+	})
+
+	t.Run("acquire_panic", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				tt.Fatal("limit not panic")
+			}
+		}()
+
+		release := func(context.Context, int) error { return nil }
+		New(1, nil, release)
+	})
+
+	t.Run("release_panic", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				tt.Fatal("limit not panic")
+			}
+		}()
+
+		acquire := func(context.Context) (int, error) { return 0, nil }
+		New(1, acquire, nil)
+	})
+
+	t.Run("not_panic", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				tt.Fatal(r)
+			}
+		}()
+
+		ctx := context.Background()
+
+		acquire := func(context.Context) (int, error) { return 1, nil }
+		release := func(context.Context, int) error { return nil }
+		pool := New(1, acquire, release)
+		defer pool.Close(ctx)
+
+		value, err := pool.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if value != 1 {
+			t.Fatalf("got %+v is wrong", value)
+		}
+	})
+
+	t.Run("acquire_idle_error", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				tt.Fatal(r)
+			}
+		}()
+
+		ctx := context.Background()
+
+		wantErr := errors.New("wow")
+		acquire := func(context.Context) (int, error) { return 0, nil }
+		release := func(context.Context, int) error { return wantErr }
+		available := func(context.Context, int) bool { return false }
+		pool := New(1, acquire, release).WithAvailableFunc(available)
+		defer pool.Close(ctx)
+
+		err := pool.Release(ctx, 0)
+		if err != nil {
+			t.Fatalf("got %+v is wrong", err)
+		}
+
+		_, err = pool.Acquire(ctx)
+		if err != wantErr {
+			t.Fatalf("got %+v != want %+v", err, wantErr)
+		}
+	})
+
+	t.Run("acquire_wait_error", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				tt.Fatal(r)
+			}
+		}()
+
+		ctx := context.Background()
+
+		wantErr := errors.New("wow")
+		acquire := func(context.Context) (int, error) { return 0, nil }
+		release := func(context.Context, int) error { return wantErr }
+		available := func(context.Context, int) bool { return false }
+		pool := New(1, acquire, release).WithAvailableFunc(available)
+		defer pool.Close(ctx)
+
+		_, err := pool.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		go func() {
+			time.Sleep(time.Millisecond)
+			err := pool.Release(ctx, 0)
+			if err != nil {
+				t.Errorf("got %+v is wrong", err)
+			}
+		}()
+
+		_, err = pool.Acquire(ctx)
+		if err != wantErr {
+			t.Fatalf("got %+v != want %+v", err, wantErr)
+		}
+	})
+
+	t.Run("acquire_wait_continue_error", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				tt.Fatal(r)
+			}
+		}()
+
+		ctx := context.Background()
+
+		acquire := func(context.Context) (int, error) { return 0, nil }
+		release := func(context.Context, int) error { return nil }
+		available := func(context.Context, int) bool { return false }
+		pool := New(1, acquire, release).WithAvailableFunc(available)
+		defer pool.Close(ctx)
+
+		_, err := pool.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		go func() {
+			time.Sleep(time.Millisecond)
+			err := pool.Release(ctx, 0)
+			if err != nil {
+				t.Errorf("got %+v is wrong", err)
+			}
+		}()
+
+		_, err = pool.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("release_error", func(tt *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				tt.Fatal(r)
+			}
+		}()
+
+		ctx := context.Background()
+
+		wantErr := errors.New("wow")
+		acquire := func(context.Context) (int, error) { return 0, wantErr }
+		release := func(context.Context, int) error { return wantErr }
+		pool := New(1, acquire, release)
+		defer pool.Close(ctx)
+
+		_, err := pool.Acquire(ctx)
+		if err != wantErr {
+			t.Fatalf("got %+v != want %+v", err, wantErr)
+		}
+
+		err = pool.Release(ctx, 0)
+		if err != nil {
+			t.Fatalf("got %+v is wrong", err)
+		}
+
+		err = pool.Release(ctx, 0)
+		if err != wantErr {
+			t.Fatalf("got %+v != want %+v", err, wantErr)
+		}
+	})
+}
 
 // go test -v -cover -run=^TestWithAvailableFunc$
 func TestWithAvailableFunc(t *testing.T) {
@@ -284,4 +473,76 @@ func TestPoolAvailable(t *testing.T) {
 
 	wg.Wait()
 	t.Logf("%+v", pool.Status())
+}
+
+// go test -v -cover -run=^TestPoolClose$
+func TestPoolClose(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal(r)
+		}
+	}()
+
+	ctx := context.Background()
+	releaseLimit := 0
+
+	acquire := func(context.Context) (int, error) { return 0, nil }
+	release := func(context.Context, int) error {
+		releaseLimit++
+		return nil
+	}
+
+	pool := New(64, acquire, release)
+	defer pool.Close(ctx)
+
+	err := pool.Close(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !pool.closed {
+		t.Fatalf("got %+v is wrong", pool.closed)
+	}
+
+	_, err = pool.Acquire(ctx)
+	if err != errPoolClosed {
+		t.Fatalf("got %+v != want %+v", err, errPoolClosed)
+	}
+
+	err = pool.Release(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if releaseLimit != 1 {
+		t.Fatalf("got %+v is wrong", releaseLimit)
+	}
+}
+
+// go test -v -cover -run=^TestPoolTimeout$
+func TestPoolTimeout(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond)
+	defer cancel()
+
+	acquire := func(context.Context) (int, error) { return 0, nil }
+	release := func(context.Context, int) error { return nil }
+
+	pool := New(1, acquire, release)
+	defer pool.Close(ctx)
+
+	_, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(2 * time.Millisecond)
+	if err = ctx.Err(); err == nil {
+		t.Fatalf("got %+v is wrong", err)
+	}
+
+	_, err = pool.Acquire(ctx)
+	if err != ctx.Err() {
+		t.Fatalf("got %+v != want %+v", err, ctx.Err())
+	}
 }
