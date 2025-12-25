@@ -229,3 +229,59 @@ func TestPoolAcquireRelease(t *testing.T) {
 		t.Fatalf("pool.waited %d > 0 but waitedDuration %d <= 0", pool.waited, pool.waitedDuration)
 	}
 }
+
+// go test -v -cover -run=^TestPoolAvailable$
+func TestPoolAvailable(t *testing.T) {
+	ctx := context.Background()
+
+	type Resource struct {
+		available bool
+	}
+
+	acquire := func(acquireCtx context.Context) (Resource, error) {
+		resource := Resource{available: true}
+		return resource, nil
+	}
+
+	release := func(releaseCtx context.Context, resource Resource) error {
+		return nil
+	}
+
+	available := func(ctx context.Context, resource Resource) bool {
+		return resource.available
+	}
+
+	pool := New(1024, acquire, release).WithAvailableFunc(available)
+	defer pool.Close(ctx)
+
+	var n = 65536
+	var wg sync.WaitGroup
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(ii int) {
+			defer wg.Done()
+
+			resource, err := pool.Acquire(ctx)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			if !resource.available {
+				t.Errorf("resource.available %+v is wrong", resource.available)
+				return
+			}
+
+			// Hava some fun :)
+			if rand.IntN(n) > ii {
+				resource.available = false
+			}
+
+			pool.Release(ctx, resource)
+		}(i)
+	}
+
+	wg.Wait()
+	t.Logf("%+v", pool.Status())
+}
