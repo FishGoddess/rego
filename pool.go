@@ -135,6 +135,11 @@ func (p *Pool[Resource]) Acquire(ctx context.Context) (resource Resource, err er
 			p.lock.Lock()
 			p.active--
 			p.lock.Unlock()
+
+			if err = p.release(ctx, resource); err != nil {
+				return resource, err
+			}
+
 			continue
 		}
 
@@ -179,6 +184,11 @@ func (p *Pool[Resource]) Acquire(ctx context.Context) (resource Resource, err er
 		p.lock.Lock()
 		p.active--
 		p.lock.Unlock()
+
+		if err = p.release(ctx, resource); err != nil {
+			return resource, err
+		}
+
 		continue
 	}
 }
