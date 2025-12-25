@@ -73,6 +73,15 @@ func TestNew(t *testing.T) {
 		if value != 1 {
 			t.Fatalf("got %+v is wrong", value)
 		}
+
+		status := pool.Status()
+		if status.Using != 1 {
+			t.Fatalf("got %+v is wrong", status.Using)
+		}
+
+		if status.Idle != 0 {
+			t.Fatalf("got %+v is wrong", status.Idle)
+		}
 	})
 
 	t.Run("acquire_idle_error", func(tt *testing.T) {
