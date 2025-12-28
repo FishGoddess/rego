@@ -188,8 +188,6 @@ func (p *Pool[Resource]) Acquire(ctx context.Context) (resource Resource, err er
 		if err = p.release(ctx, resource); err != nil {
 			return resource, err
 		}
-
-		continue
 	}
 }
 
