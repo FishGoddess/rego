@@ -243,6 +243,8 @@ func (p *Pool[Resource]) releaseAll(ctx context.Context) error {
 			if err := p.release(ctx, resource); err != nil {
 				return err
 			}
+
+			p.active--
 		default:
 			return nil
 		}
